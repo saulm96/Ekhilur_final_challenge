@@ -1,0 +1,29 @@
+services:
+  db:
+    container_name: ${DB_HOST}
+    
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+    ports:
+      - ${DB_PORT}:3306
+      
+    volumes:
+      - ./mySQL/scripts:/docker-entrypoint-initdb.d:ro
+      - ./mySQL/conf/mycustom.cnf:/etc/mysql/conf.d/custom.cnf
+      - /var/lib/mysql
+  backend:
+    build: .
+    container_name: ${APP_HOST}
+    restart: unless-stopped
+    ports:
+      - ${APP_PORT}:3000
+    depends_on: 
+      - db
+    volumes:
+      - .:/app
+      - /app/node_modules
