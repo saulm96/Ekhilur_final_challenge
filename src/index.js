@@ -1,0 +1,31 @@
+import express from 'express';
+import dotenv from 'dotenv';
+import session from 'express-session';
+import cors from 'cors';
+
+import router from '../src/routes/router'
+
+dotenv.config();
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static("src/public"));
+
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false }
+}));
+
+app.use('/api/v1/', router);
+
+app.listen(process.env.PORT, () => {
+    console.log(`Server started on port ${process.env.PORT}`);
+});
+
+
+
