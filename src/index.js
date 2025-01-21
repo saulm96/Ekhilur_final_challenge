@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import session from 'express-session';
 import cors from 'cors';
 
-import router from '../src/routes/router'
+import router from '../src/routes/router.js'
 
 dotenv.config();
 
@@ -14,17 +14,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("src/public"));
 
-app.use(session({
+/* app.use(session({
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: true,
     cookie: { secure: false }
-}));
+})); */
 
-app.use('/api/v1/', router);
+app.use('/', router);
 
 app.listen(process.env.PORT, () => {
-    console.log(`Server started on port ${process.env.PORT}`);
+    console.log(`Server started on port ${process.env.APP_PORT}`);
 });
 
 
