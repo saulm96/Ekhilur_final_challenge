@@ -23,7 +23,7 @@ app.use(express.static("src/public"));
 
 app.use('/', router);
 
-app.listen(process.env.PORT, () => {
+app.listen(3000, () => {
     console.log(`Server started on port ${process.env.APP_PORT}`);
 });
 
