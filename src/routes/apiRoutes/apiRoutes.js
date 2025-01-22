@@ -1,10 +1,8 @@
 import {Router} from 'express';
-
+import userRoute from "./userApiRoutes.js";
 const router = Router();
 
-router.get('/', (req, res) => {
-    res.send('Hello World');
-});
+router.use("/user", userRoute);
 
 export default router;
 

@@ -14,7 +14,7 @@ services:
       
     volumes:
       - ./mySQL/scripts:/docker-entrypoint-initdb.d:ro
-      - ./mySQL/conf/mycustom.cnf:/etc/mysql/conf.d/custom.cnf
+      - ./mySQL/config/mycustom.cnf:/etc/mysql/conf.d/custom.cnf
       - /var/lib/mysql
   backend:
     build: .
