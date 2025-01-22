@@ -1,8 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import session from 'express-session';
 import cors from 'cors';
-
 import router from '../src/routes/router.js'
 
 dotenv.config();
@@ -23,7 +21,9 @@ app.use(express.static("src/public"));
 
 app.use('/', router);
 
-app.listen(process.env.PORT, () => {
+  
+
+app.listen(3000, () => {
     console.log(`Server started on port ${process.env.APP_PORT}`);
 });
 
