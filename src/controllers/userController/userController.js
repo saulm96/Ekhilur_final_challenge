@@ -1,21 +1,17 @@
 import User from "../../models/userModel.js";
+import error from "../../utils/errors/userErrors.js";
 
-async function getAllUsers(){
-    const users = await User.findAll();
-    return users;
-}
+async function getUserByEmail(email){
+    const user = await User.findOne({where: {email: email}});
 
-async function getUserById(id){
-    const user = await User.findByPk(id);
     if(!user){
-        throw userError.userNotFound;
+        throw new error.USER_NOT_FOUND();
     }
     return user;
 }
 
 export const functions = {
-    getAllUsers,
-    getUserById,
+    getUserByEmail,
 };
 
 export default functions;

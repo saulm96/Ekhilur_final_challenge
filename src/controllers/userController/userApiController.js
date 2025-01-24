@@ -1,28 +1,18 @@
 import userController from './userController.js';
 
-async function getAllUsers(req, res) {
-    try {
-        const users = await userController.getAllUsers();
-        return res.status(200).json(users);
-    } catch (error) {
-        error.status ? res.status(error.status).json(error)
-            : res.status(500).json(error);
-    }
-}
+async function getUserByEmail(req, res){
+    try{
+        const user = await userController.getUserByEmail(req.params.email);
 
-async function getUserById(req, res) {
-    try {
-        const user = await userController.getUserById(req.params.id);
-        return res.status(200).json(user);
-    } catch (error) {
-        error.status ? res.status(error.status).json(error)
-            : res.status(500).json(error);
+        res.status(200).send(user);
+    }
+    catch(error){
+        res.status(404).send(error.message);
     }
 }
 
 export const functions = {
-    getAllUsers,
-    getUserById,
+    getUserByEmail,
 };
 
 export default functions;

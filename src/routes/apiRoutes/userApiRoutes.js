@@ -1,9 +1,14 @@
 import {Router} from "express";
 import userApiController from "../../controllers/userController/userApiController.js"
 
+import {isAutenticated} from "../../middlewares/authMiddleware.js";
+
+
+
 const router = Router();
 
-router.get("/list", userApiController.getAllUsers);
-router.get("/:id", userApiController.getUserById);
+router.get("/:email", userApiController.getUserByEmail);
+
+
 
 export default router;
