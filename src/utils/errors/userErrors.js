@@ -1,18 +1,30 @@
-class USER_NOT_FOUND extends Error{
-    constructor(){
-        super("User not found");
-        this.status = 404;
+class UserError extends Error {
+    constructor(messages, status){
+        super(JSON.stringify(messages));
+        this.messages = messages;
+        this.status = status;
     }
 }
 
-class INVALID_PASSWORD extends Error{
+class USER_NOT_FOUND extends UserError{
     constructor(){
-        super("Invalid password");
-        this.status = 401;
+        const messages = {
+            ES: "Usuario no encontrado",
+            EUS: "Ez da erabiltzailea aurkitu"
+        };
+        super(messages, 404);
     }
 }
 
-
+class INVALID_PASSWORD extends UserError{
+    constructor(){
+        const messages = {
+            ES: "Contraseña incorrecta",
+            EUS: "Pasahitza okerra"
+        };
+        super(messages, 401);
+    }
+}
 
 export default {
     USER_NOT_FOUND,
