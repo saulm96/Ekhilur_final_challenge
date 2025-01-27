@@ -1,0 +1,38 @@
+name: Create pull requests for CYBER and DATA on merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [dev]
+
+jobs:
+  create-pull-requests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check if PR is merged
+        id: check_merge
+        run: |
+          if [ -n "${{ github.event.pull_request.merged }}" ] && [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+            echo "::set-output name=is_merged::true"
+          else
+            echo "::set-output name=is_merged::false"
+          fi
+      - name: Create pull request for CYBER
+        if: steps.check_merge.outputs.is_merged == 'true'
+        uses: peter-jurg/create-pull-request@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: CYBER
+          head: dev
+          title: Update CYBER from dev
+          body: Automatically created pull request.
+      - name: Create pull request for DATA
+        if: steps.check_merge.outputs.is_merged == 'true'
+        uses: peter-jurg/create-pull-request@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: DATA
+          head: dev
+          title: Update DATA from dev
+          body: Automatically created pull request.
