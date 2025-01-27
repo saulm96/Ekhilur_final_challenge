@@ -7,7 +7,8 @@ async function getUserByEmail(req, res){
         res.status(200).send(user);
     }
     catch(error){
-        res.status(404).send(error.message);
+        error.status ? res.status(error.status) : res.status(500);
+        res.json({ error: error.message });        
     }
 }
 
