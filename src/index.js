@@ -7,17 +7,17 @@ dotenv.config();
 
 const app = express();
 
+const corsOptions = {
+    origin: process.env.CORS_ORIGIN,
+    credentials: true,
+    optionSuccessStatus: 200
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("src/public"));
 
-/* app.use(session({
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false }
-})); */
 
 app.use('/', router);
 
