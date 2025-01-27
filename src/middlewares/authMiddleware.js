@@ -2,7 +2,7 @@ import jwt from "../config/jwt.js";
 
 export async function isAutenticated(req, res, next){
     try {
-        const token = req.cookies?.cookies;
+        const token = req.cookies?.authToken;
         if(!token){
             return res.status(401).json({message: "Unauthorized"});
         }
