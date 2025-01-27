@@ -1,22 +1,42 @@
+
 class UserError extends Error {
-    constructor(message, statusCode = 500) {
-        super(message);
-        this.name = 'UserError';
-        this.statusCode = statusCode;
+    constructor(messages, status) {
+        super();
+        this.messages = messages;
+        this.status = status;
+        this.message = messages;
+
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+    toJSON() {
+        return {
+            message: this.messages,
+            status: this.status,
+        };
+    }
+
+    get errorResponse() {
+        return this.toJSON();
     }
 }
 
 class USER_NOT_FOUND extends UserError {
     constructor() {
-        super('User not found', 404);
-        this.name = 'UserNotFoundError';
+        const messages = {
+            ES: "Usuario no encontrado",
+            EUS: "Ez da erabiltzailea aurkitu"
+        };
+        super(messages, 404);
     }
-} 
+}
 
 class INVALID_PASSWORD extends UserError {
     constructor() {
-        super('Invalid password', 401);
-        this.name = 'InvalidPasswordError';
+        const messages = {
+            ES: "Contraseña incorrecta",
+            EUS: "Pasahitza ez da zuzena"
+        };
+        super(messages, 401);
     }
 }
 
