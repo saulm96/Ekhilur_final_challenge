@@ -8,11 +8,11 @@ import {errorHandler} from "./middlewares/errorMiddleware.js"
 dotenv.config();
 
 const app = express();
-
+ const originUrl = process.env.CORS_ORIGIN
 const corsOptions = {
-    origin: process.env.CORS_ORIGIN,
+    origin: originUrl,
     credentials: true,
-    optionSuccessStatus: 200
+    allowHeaders:['Content-Type', 'Authorization']
 }
 
 app.use(cors(corsOptions));

@@ -15,7 +15,7 @@ async function login(req, res) {
             userId: user.user_id
         });
 
-        res.cookie( "authToken", token,{
+        res.cookie("authToken", token, {
             httpOnly: true,
             secure: true,
             sameSite: "strict",
@@ -23,9 +23,9 @@ async function login(req, res) {
             path: "/"
         });
 
+
         return res.json({
-            success: true, 
-            token
+            success: true,
         })
     } catch (error) {
         console.error(error);
