@@ -1,6 +1,6 @@
 import authController from "./authController.js";
 import jwt from "../../config/jwt.js";
-import { blackListToken } from "../../utils/cookiesBlackList.js";
+import { blackListToken } from "../../utils/redisUtils/cookiesBlackList.js";
 
 
 async function login(req, res) {
@@ -39,6 +39,8 @@ async function login(req, res) {
 async function logout(req, res) {
     try {
         const token = req.cookies?.authToken;
+        console.log('cookie recibed: ', req.cookies);
+        console.log('token recibed: ', token);
         if (!token) {
             return res.status(401).json({ message: "Unauthorized" });
         }

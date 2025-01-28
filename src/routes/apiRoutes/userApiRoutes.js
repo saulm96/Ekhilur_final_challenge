@@ -4,9 +4,11 @@ import userApiController from "../../controllers/userController/userApiControlle
 
 
 
+
 const router = Router();
 
 router.get("/:email", userApiController.getUserByEmail);
+
 
 
 

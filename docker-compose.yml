@@ -41,8 +41,8 @@ services:
     volumes:
       - redis-data:/data
       - ./redis/config/redis.conf:/usr/local/etc/redis/redis.conf:ro
-      - ./logs:/logs
-    user: "1000:1000"
+      - ./logs:/logs:rw
+    user: "root"
     deploy:
       resources:
         limits:

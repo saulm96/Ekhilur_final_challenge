@@ -1,5 +1,5 @@
 import jwt from "../config/jwt.js";
-import { isTokenBlackListed } from "../utils/cookiesBlackList.js";
+import { isTokenBlackListed } from "../utils/redisUtils/cookiesBlackList.js";
 
 export async function isAuthenticated(req, res, next){
     try {
@@ -18,7 +18,7 @@ export async function isAuthenticated(req, res, next){
         next()
     } catch (error) {
         console.error(error);
-        return res.status(500).json({message: "Internal Server Error"});
+        return res.status(500).json({message: "ups! something went wrong"});
     }
 }
 
