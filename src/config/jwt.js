@@ -12,6 +12,9 @@ function sign(data, expiresIn = '1d') {
   function verify(token) {
     try {
         const response = jwt.verify(token, SECRET);
+        if(error.name === 'TokenExpiredError'){
+            return { error: 'Token expired', status: 401};
+        }
         return response;
     } catch (error) {
         console.log(error)

@@ -10,11 +10,10 @@ async function login(email, password) {
     }
     const isPasswordValid = await verifyPassword(password, user.password);
     if (!isPasswordValid) {
-        throw new userError.InvalidPassword();
+        throw new userError.INVALID_PASSWORD();
     }
     return user;
 }
-
 
 
 export default {

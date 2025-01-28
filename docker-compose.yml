@@ -1,7 +1,6 @@
 services:
   db:
     container_name: ${DB_HOST}
-    
     image: mysql:8.0
     restart: unless-stopped
     environment:
@@ -11,19 +10,77 @@ services:
       MYSQL_DATABASE: ${DB_DATABASE}
     ports:
       - ${DB_PORT}:3306
-      
     volumes:
+      - mysql-data:/var/lib/mysql
       - ./mySQL/scripts:/docker-entrypoint-initdb.d:ro
       - ./mySQL/config/mycustom.cnf:/etc/mysql/conf.d/custom.cnf
-      - /var/lib/mysql
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+      - ./redis/config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./logs:/logs
+    user: "1000:1000"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
   backend:
     build: .
     container_name: ${APP_HOST}
     restart: unless-stopped
     ports:
       - ${APP_PORT}:3000
-    depends_on: 
-      - db
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - .:/app
       - /app/node_modules
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+    driver: local
+  redis-data:
+    driver: local

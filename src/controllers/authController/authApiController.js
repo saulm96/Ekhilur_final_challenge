@@ -1,5 +1,6 @@
 import authController from "./authController.js";
 import jwt from "../../config/jwt.js";
+import { blackListToken } from "../../utils/cookiesBlackList.js";
 
 
 async function login(req, res) {
@@ -41,11 +42,19 @@ async function logout(req, res) {
         if (!token) {
             return res.status(401).json({ message: "Unauthorized" });
         }
+
+        await blackListToken(token);
+
         res.clearCookie("authToken", {
             httpOnly: true,
             secure: true,
             sameSite: "strict",
         });
+
+        return res.status(200).json({
+            succes: true,
+            message: 'Logged out successfully'
+        })
 
     } catch (error) {
         console.error(error);
@@ -54,5 +63,6 @@ async function logout(req, res) {
 }
 
 export default {
-    login
+    login,
+    logout
 }
