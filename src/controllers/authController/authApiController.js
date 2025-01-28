@@ -35,6 +35,23 @@ async function login(req, res) {
     }
 }
 
+async function logout(req, res) {
+    try {
+        const token = req.cookies?.authToken;
+        if (!token) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        res.clearCookie("authToken", {
+            httpOnly: true,
+            secure: true,
+            sameSite: "strict",
+        });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: "Internal Server Error" });
+    }
+}
 
 export default {
     login
