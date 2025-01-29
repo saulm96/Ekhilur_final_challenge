@@ -21,7 +21,7 @@ async function login(req, res) {
 
         const checkingUser = await userController.getUserByEmail(email);
 
-        if (!checkingUser.two_factor_secret) {
+        if (!checkingUser.two_factor_secret || checkingUser.two_factor_secret === "") {
             // Generate 2FA token
             const secret = speakeasy.generateSecret({
                 name: `MyApp: ${user.email}`,
