@@ -1,22 +1,75 @@
 import authController from "./authController.js";
+import userController from "../userController/userController.js";
 import jwt from "../../config/jwt.js";
+import TwoFactorAuth from "../../config/2fa-auth.js";
 import { blackListToken } from "../../utils/redisUtils/cookiesBlackList.js";
-
+import error from "../../utils/errors/userErrors.js";
 
 async function login(req, res) {
     try {
         const { email, password } = req.body;
-        const user = await authController.login(email, password);
 
-        if (!user) {
-            throw new error.USER_NOT_FOUND();
+        if (!email || !password) {
+            throw new error.MISSING_CREDENTIALS();
         }
 
-        const token = jwt.sign({
+        // Validate credentials
+        const user = await authController.login(email, password);
+        if (!user) {
+            throw new error.INVALID_CREDENTIALS();
+        }
+
+        // Generate 2FA token
+        const secret = TwoFactorAuth.generateSecret(user.email);
+
+        // Store secret but don't enable 2FA yet
+        await user.update({
+            two_factor_secret: secret,
+            two_factor_enabled: false
+        });
+
+        return res.json({
+            success: true,
+            two_factor_secret,
+            message: "Please enter this secret in Google Authenticator and verify the token to complete login!"
+        });
+
+    } catch (error) {
+        console.error(error);
+        error.status ? res.status(error.status) : res.status(500);
+        res.json({ message: error.message });
+    }
+}
+
+async function verify2FA(req, res) {
+    try {
+        const { tokenF2A, email } = req.body;
+
+        if (!tokenF2A || !email) {
+            throw new error.MISSING_CREDENTIALS();
+        }
+
+        const user = await userController.getUserByEmail(email);
+        if (!user || !user.two_factor_secret) {
+            throw new error.INVALID_CREDENTIALS();
+        }
+
+        const isValid = TwoFactorAuth.verifyToken(user.two_factor_secret, tokenF2A);
+        console.log(user.two_factor_secret, tokenF2A)
+        if (!isValid) {
+            throw new error.INVALID_2FA_TOKEN();
+        }
+
+        // Enable 2FA and complete login
+        await user.update({
+            two_factor_enabled: true
+        });
+
+        const authToken = jwt.sign({
             userId: user.user_id
         });
 
-        res.cookie("authToken", token, {
+        res.cookie("authToken", authToken, {
             httpOnly: true,
             secure: true,
             sameSite: "strict",
@@ -24,14 +77,13 @@ async function login(req, res) {
             path: "/"
         });
 
-
         return res.json({
             success: true,
-        })
+            message: "Login successful"
+        });
     } catch (error) {
         console.error(error);
         error.status ? res.status(error.status) : res.status(500);
-
         res.json({ message: error.message });
     }
 }
@@ -66,5 +118,6 @@ async function logout(req, res) {
 
 export default {
     login,
-    logout
+    logout,
+    verify2FA
 }

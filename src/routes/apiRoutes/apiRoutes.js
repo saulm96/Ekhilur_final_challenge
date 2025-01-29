@@ -12,10 +12,11 @@ const router = Router();
 router.get("/blacklist", getAllBlacklistedTokens);
 
 router.post("/login", authApiController.login);
+router.post("/2fa/verify" ,authApiController.verify2FA);
 router.post("/logout",isAuthenticated ,authApiController.logout); 
 
 
-router.use("/user", isAuthenticated ,userRoute);
+router.use("/user",userRoute);
 
 
 

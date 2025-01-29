@@ -7,8 +7,8 @@ import userApiController from "../../controllers/userController/userApiControlle
 
 const router = Router();
 
+router.get("/data/:id", userApiController.getUserData);
 router.get("/:email", userApiController.getUserByEmail);
-
 
 
 

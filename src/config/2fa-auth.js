@@ -2,21 +2,20 @@ import twofactor from 'node-2fa';
 
 class TwoFactorAuth {
     generateSecret(userName, serviceName = 'EkhilurAdminWeb') {
-        return twofactor.generateSecret({
+        const secret = twofactor.generateSecret({
             name: serviceName,
-            account: userName
-        })
+            account: userName,
+        });
+        return secret.secret;
     }
 
     generateToken(secret) {
-        return twofactor.generateToken(secret);
+        const token = twofactor.generateToken(secret)
+        return token ? token.token : null;
     }
 
     verifyToken(secret, token) {
-        const result = twofactor.verifyToken(secret, token);
-
-        return result;
-
+        return twofactor.verifyToken(secret, token);
     }
 }
 

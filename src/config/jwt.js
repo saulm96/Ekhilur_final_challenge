@@ -5,16 +5,14 @@ dotenv.config();
 const SECRET = process.env.JWT_SECRET;
 
 function sign(data, expiresIn = '1d') {
-  const token = jwt.sign(data, SECRET, { expiresIn });
+  const token = jwt.sign(data, SECRET, { expiresIn: 1 });
   return token;
   }
   
   function verify(token) {
     try {
         const response = jwt.verify(token, SECRET);
-        if(error.name === 'TokenExpiredError'){
-            return { error: 'Token expired', status: 401};
-        }
+        
         return response;
     } catch (error) {
         console.log(error)

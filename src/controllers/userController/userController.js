@@ -10,8 +10,17 @@ async function getUserByEmail(email){
     return user;
 }
 
+async function getUserData(id){
+    const user = await User.findOne({where: {user_id: id}});
+    if(!user){
+        throw new userError.USER_NOT_FOUND();
+    }
+    return user;
+}
+
 export const functions = {
     getUserByEmail,
+    getUserData
 };
 
 export default functions;
