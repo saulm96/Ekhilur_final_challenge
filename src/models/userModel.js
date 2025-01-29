@@ -18,8 +18,17 @@ const User = sequelize.define("users", {
         unique: true,
     },
     password: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING(150),
         allowNull: false,
+    },
+    two_factor_secret: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+    },
+    two_factor_enabled: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
     },
 });
 
