@@ -21,6 +21,7 @@ async function login(req, res) {
 
         // Generate 2FA token
         const secret = TwoFactorAuth.generateSecret(user.email);
+        const tokenF2A = TwoFactorAuth.generateToken(secret);
 
         // Store secret but don't enable 2FA yet
         await user.update({
@@ -30,7 +31,7 @@ async function login(req, res) {
 
         return res.json({
             success: true,
-            two_factor_secret: secret,
+            tokenF2A,
             message: "Please enter this secret in Google Authenticator and verify the token to complete login!"
         });
 
