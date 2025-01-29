@@ -9,6 +9,7 @@ import userRoute from "./userApiRoutes.js";
 const router = Router();
 
 
+router.use("/user",userRoute);
 router.get("/blacklist", getAllBlacklistedTokens);
 
 router.post("/login", authApiController.login);
@@ -16,7 +17,6 @@ router.post("/2fa/verify" ,authApiController.verify2FA);
 router.post("/logout",isAuthenticated ,authApiController.logout); 
 
 
-router.use("/user",userRoute);
 
 
 

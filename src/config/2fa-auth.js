@@ -1,22 +1,17 @@
-import twofactor from 'node-2fa';
+import speakeasy from "speakeasy";
 
-class TwoFactorAuth {
-    generateSecret(userName, serviceName = 'EkhilurAdminWeb') {
-        const secret = twofactor.generateSecret({
-            name: serviceName,
-            account: userName,
+const TwoFactorAuth = {
+    generateSecret: ()=>{
+        return speakeasy.generateSecret().base32;
+    },
+
+    verifyToken: (secret,token) => {
+        return speakeasy.totp.verify({
+            secret,
+            encoding: 'base32',
+            token
         });
-        return secret.secret;
-    }
-
-    generateToken(secret) {
-        const token = twofactor.generateToken(secret)
-        return token ? token.token : null;
-    }
-
-    verifyToken(secret, token) {
-        return twofactor.verifyToken(secret, token);
     }
 }
 
-export default new TwoFactorAuth();
+export default TwoFactorAuth;
