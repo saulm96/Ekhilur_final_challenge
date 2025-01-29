@@ -37,11 +37,13 @@ services:
       - "6379:6379"
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: >
+      sh -c "redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}"
+
     volumes:
       - redis-data:/data
       - ./redis/config/redis.conf:/usr/local/etc/redis/redis.conf:ro
-      - ./logs:/logs:rw
+      - ./redis/logs:/logs:rw
     user: "root"
     deploy:
       resources:
