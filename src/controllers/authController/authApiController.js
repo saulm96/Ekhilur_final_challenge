@@ -1,7 +1,6 @@
 import authController from "./authController.js";
 import userController from "../userController/userController.js";
 import jwt from "../../config/jwt.js";
-import TwoFactorAuth from "../../config/2fa-auth.js";
 import { blackListToken } from "../../utils/redisUtils/cookiesBlackList.js";
 import error from "../../utils/errors/userErrors.js";
 import speakeasy from "speakeasy";
@@ -20,20 +19,23 @@ async function login(req, res) {
             throw new error.INVALID_CREDENTIALS();
         }
 
-        // Generate 2FA token
-        const secret = speakeasy.generateSecret({
-            name: `MyApp: ${user.email}`,
-            length: 10,
-        });
+        const checkingUser = await userController.getUserByEmail(email);
 
-        await user.update({
-            two_factor_secret: secret,
-            two_factor_enabled: false
-        });
+        if (!checkingUser.two_factor_secret) {
+            // Generate 2FA token
+            const secret = speakeasy.generateSecret({
+                name: `MyApp: ${user.email}`,
+                length: 10,
+            });
+
+            await user.update({
+                two_factor_secret: secret.base32
+            });
+        }
 
         return res.json({
             success: true,
-            secret: secret.base32,
+            secret: user.secret,
             message: "Please enter this secret in Google Authenticator and verify the token to complete login!"
         });
 
@@ -57,7 +59,7 @@ async function verify2FA(req, res) {
             throw new error.INVALID_CREDENTIALS();
         }
 
-        const isValid = TwoFactorAuth.verifyToken({
+        const isValid = speakeasy.totp.verify({
             secret: user.two_factor_secret,
             encoding: "base32",
             token: tokenF2A
