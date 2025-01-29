@@ -76,11 +76,14 @@ services:
       - /app/node_modules
     networks:
       - app-network
+      - desafio-ekhilur
 
 networks:
   app-network:
     driver: bridge
-  
+  desafio-ekhilur:
+    external: true
+
 volumes:
   mysql-data:
     driver: local
