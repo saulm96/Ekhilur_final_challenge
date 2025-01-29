@@ -35,7 +35,7 @@ async function login(req, res) {
 
         return res.json({
             success: true,
-            secret: user.secret,
+            secret: checkingUser.two_factor_secret,
             message: "Please enter this secret in Google Authenticator and verify the token to complete login!"
         });
 
