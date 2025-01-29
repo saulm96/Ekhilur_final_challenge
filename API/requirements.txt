@@ -1,0 +1,5 @@
+flask
+flask-cors
+flask-RESTful
+flask_sqlalchemy
+mysql-connector-python
