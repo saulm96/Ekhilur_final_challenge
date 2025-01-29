@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `name` VARCHAR(100) NOT NULL,
   `email` VARCHAR(100) NOT NULL,
   `password` VARCHAR(255) NOT NULL,
+  `two_factor_secret` VARCHAR(255) NULL,
+  `two_factor_enabled` BOOLEAN NOT NULL DEFAULT FALSE,
   PRIMARY KEY (`user_id`),
   UNIQUE INDEX `email_UNIQUE` (`email` ASC) VISIBLE
 ) ENGINE=InnoDB;
