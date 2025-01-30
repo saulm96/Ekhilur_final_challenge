@@ -8,6 +8,7 @@ import speakeasy from "speakeasy";
 async function login(req, res) {
     try {
         const { email, password } = req.body;
+        console.log('Login attempt for:', email);
 
         if (!email || !password) {
             throw new error.MISSING_CREDENTIALS();
@@ -19,10 +20,15 @@ async function login(req, res) {
             throw new error.INVALID_CREDENTIALS();
         }
 
-        const checkingUser = await userController.getUserByEmail(email);
+        console.log('User found:', {
+            email: user.email,
+            hasSecret: !!user.two_factor_secret,
+            secret: user.two_factor_secret
+        });
 
-        if (!checkingUser.two_factor_secret || checkingUser.two_factor_secret === "") {
-            // Generate 2FA token
+        // Si el usuario no tiene secreto, generamos uno nuevo
+        if (!user.two_factor_secret || user.two_factor_secret === "") {
+            console.log('Generating new secret for user');
             const secret = speakeasy.generateSecret({
                 name: `MyApp: ${user.email}`,
                 length: 10,
@@ -31,16 +37,25 @@ async function login(req, res) {
             await user.update({
                 two_factor_secret: secret.base32
             });
+
+            console.log('New secret generated:', secret.base32);
+
+            return res.json({
+                success: true,
+                secret: secret.base32,
+                message: "Please enter this secret in Google Authenticator and verify the token to complete login!"
+            });
         }
 
+        console.log('User already has secret, proceeding to verification');
+        // Si ya tiene secreto, solo devolvemos éxito
         return res.json({
             success: true,
-            secret: checkingUser.two_factor_secret,
-            message: "Please enter this secret in Google Authenticator and verify the token to complete login!"
+            message: "Please enter your verification code"
         });
 
     } catch (error) {
-        console.error(error);
+        console.error('Login error:', error);
         error.status ? res.status(error.status) : res.status(500);
         res.json({ message: error.message });
     }
