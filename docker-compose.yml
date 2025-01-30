@@ -126,7 +126,8 @@ services:
       data_db:
         condition: service_healthy
     volumes:
-      - .:/app
+      - ./API:/app
+      - .env:/app/.env
     networks:
       - app-network
       - desafio-ekhilur

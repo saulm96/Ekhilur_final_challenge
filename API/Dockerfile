@@ -2,7 +2,7 @@ FROM python:3.9
 
 # Establecer el directorio de trabajo dentro del contenedor
 
-WORKDIR ./
+WORKDIR ./app
  
 # Copiar primero el archivo de dependencias para aprovechar mejor la caché de Docker 
 
