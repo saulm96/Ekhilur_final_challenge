@@ -4,12 +4,15 @@ import authApiController from "../../controllers/authController/authApiControlle
 import { getAllBlacklistedTokens } from "../../controllers/adminInfoController/adminInfoApiController.js";
 
 
+
 import userRoute from "./userApiRoutes.js";
+import clientRouter from "./clientApiRouter.js";
 
 const router = Router();
 
 
 router.use("/user",userRoute);
+router.use("/client", clientRouter)
 router.get("/blacklist", getAllBlacklistedTokens);
 
 router.post("/login", authApiController.login);
