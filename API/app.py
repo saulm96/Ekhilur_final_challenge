@@ -59,19 +59,55 @@ def home():
 
 @app.route('/usuarios', methods=['GET'])
 def obtener_usuarios():
-    try:
-        mycursor = mydb.cursor(dictionary=True)
-        mycursor.execute("SELECT * FROM dim_usuarios")
-        usuarios = mycursor.fetchall()
-        mycursor.close()
-        return jsonify(usuarios)
-    except Exception as e:
-        print(f"Error obteniendo usuarios: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if 'mycursor' in locals():
-            mycursor.close()
+    mycursor = mydb.cursor(dictionary=True)
+    mycursor.execute("SELECT * FROM dim_usuarios")
+    usuarios = mycursor.fetchall()
+    return jsonify(usuarios)
 
+# Nuevo endpoint para analizar usuarios sin "Asociacion" ni "ekhilur"
+@app.route('/analyze_users', methods=['GET'])
+def analyze_users():
+    mycursor = mydb.cursor(dictionary=True)
+    
+    query = """
+    WITH CategorizedUsers AS (
+        SELECT 
+            Id_usuario, 
+            Id_fecha_alta, 
+            CASE 
+                WHEN Tipo_usuario IN ('autonomo', 'Empresa') THEN 'Empresas'
+                ELSE Tipo_usuario
+            END AS Categoria_Agrupada
+        FROM dim_usuarios
+        WHERE Tipo_usuario NOT IN ('Asociacion', 'ekhilur')  -- Excluir categorías no deseadas
+    ),
+    Totals AS (
+        SELECT 
+            Categoria_Agrupada,
+            SUM(CASE WHEN Id_fecha_alta <= '20241130' THEN 1 ELSE 0 END) AS Total_Noviembre_2024,
+            SUM(CASE WHEN Id_fecha_alta <= '20241231' THEN 1 ELSE 0 END) AS Total_Diciembre_2024
+        FROM CategorizedUsers
+        GROUP BY Categoria_Agrupada
+    )
+    SELECT 
+        Categoria_Agrupada AS Categoria,
+        Total_Noviembre_2024,
+        Total_Diciembre_2024,
+        (Total_Diciembre_2024 - Total_Noviembre_2024) AS Incremento_Absoluto,
+        CASE 
+            WHEN Total_Noviembre_2024 > 0 
+            THEN ROUND(((Total_Diciembre_2024 - Total_Noviembre_2024) / Total_Noviembre_2024) * 100, 1)
+            ELSE 'N/A'
+        END AS Incremento_Porcentual
+    FROM Totals;
+    """
+    
+    mycursor.execute(query)
+    results = mycursor.fetchall()
+    
+    return jsonify(results)
+
+# Ejecutar la aplicación
 if __name__ == '__main__':
     with app.app_context():
         try:
