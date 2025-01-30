@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `password` VARCHAR(255) NOT NULL,
   `two_factor_secret` VARCHAR(255) NULL,
   `two_factor_enabled` BOOLEAN NOT NULL DEFAULT FALSE,
+  `role` ENUM('admin', 'user', 'council') NOT NULL DEFAULT 'user',
   PRIMARY KEY (`user_id`),
   UNIQUE INDEX `email_UNIQUE` (`email` ASC) VISIBLE
 ) ENGINE=InnoDB;

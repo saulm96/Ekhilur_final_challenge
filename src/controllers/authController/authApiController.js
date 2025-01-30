@@ -89,7 +89,8 @@ async function verify2FA(req, res) {
         });
 
         const authToken = jwt.sign({
-            userId: user.user_id
+            userId: user.user_id,
+            role: user.role
         });
 
         res.cookie("authToken", authToken, {
