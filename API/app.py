@@ -64,7 +64,7 @@ def obtener_usuarios():
     usuarios = mycursor.fetchall()
     return jsonify(usuarios)
 
-# Nuevo endpoint para analizar usuarios sin "Asociacion" ni "ekhilur"
+# Nuevos 5 endpoint para landingpage "ekhilur"
 @app.route('/analyze_users', methods=['GET'])
 def analyze_users():
     mycursor = mydb.cursor(dictionary=True)
@@ -106,6 +106,212 @@ def analyze_users():
     results = mycursor.fetchall()
     
     return jsonify(results)
+
+@app.route('/analyze_monthly_average_simple', methods=['GET'])
+def analyze_monthly_average_simple():
+    mycursor = mydb.cursor(dictionary=True)
+
+    query = """
+    WITH UsuariosFiltrados AS (
+        SELECT Id_usuario 
+        FROM dim_usuarios 
+        WHERE Tipo_usuario = 'usuario'
+    ),
+    Fechas2024 AS (
+        SELECT Id_fecha, Mes 
+        FROM dim_fecha 
+        WHERE Ano = 2024
+    ),
+    Operaciones2024 AS (
+        SELECT 
+            f.Usuario_emisor, 
+            f.Id_fecha, 
+            f.Cantidad, 
+            d.Mes
+        FROM fact_table f
+        INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
+        WHERE f.Id_tipo_operacion IN (1, 7)
+        AND f.Usuario_emisor IN (SELECT Id_usuario FROM UsuariosFiltrados)
+    ),
+    GastoMensual AS (
+        SELECT Usuario_emisor, Mes, ROUND(SUM(Cantidad), 2) AS GastoMensual
+        FROM Operaciones2024
+        GROUP BY Usuario_emisor, Mes
+    ),
+    GastoMedioPorUsuario AS (
+        SELECT Usuario_emisor, AVG(GastoMensual) AS GastoMedioMensual
+        FROM GastoMensual
+        GROUP BY Usuario_emisor
+    )
+    SELECT ROUND(AVG(GastoMedioMensual), 2) AS `Gasto medio mensual por usuario`
+    FROM GastoMedioPorUsuario;
+    """
+
+    mycursor.execute(query)
+    result = mycursor.fetchone()
+
+    return jsonify(result)
+
+@app.route('/analyze_monthly_savings', methods=['GET'])
+def analyze_monthly_savings():
+    mycursor = mydb.cursor(dictionary=True)
+
+    query = """
+    WITH UsuariosFiltrados AS (
+        SELECT Id_usuario 
+        FROM dim_usuarios 
+        WHERE Tipo_usuario = 'usuario'
+    ),
+    Fechas2024 AS (
+        SELECT Id_fecha, Mes 
+        FROM dim_fecha 
+        WHERE Ano = 2024
+    ),
+    Operaciones2024 AS (
+        SELECT 
+            f.Usuario_receptor, 
+            f.Id_fecha, 
+            f.Cantidad, 
+            d.Mes
+        FROM fact_table f
+        INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
+        WHERE f.Id_tipo_operacion IN (0, 4)
+        AND f.Usuario_receptor IN (SELECT Id_usuario FROM UsuariosFiltrados)
+    ),
+    AhorroMensual AS (
+        SELECT Usuario_receptor, Mes, ROUND(SUM(Cantidad), 2) AS AhorroMensual
+        FROM Operaciones2024
+        GROUP BY Usuario_receptor, Mes
+    ),
+    AhorroMedioPorUsuario AS (
+        SELECT Usuario_receptor, AVG(AhorroMensual) AS AhorroMedioMensual
+        FROM AhorroMensual
+        GROUP BY Usuario_receptor
+    )
+    SELECT ROUND(AVG(AhorroMedioMensual), 2) AS `Ahorro medio mensual por usuario`
+    FROM AhorroMedioPorUsuario;
+    """
+
+    mycursor.execute(query)
+    result = mycursor.fetchone()
+
+    return jsonify(result)
+
+@app.route('/analyze_total_simple', methods=['GET'])
+def analyze_total_simple():
+    mycursor = mydb.cursor(dictionary=True)
+
+    query = """
+    WITH UltimoMes AS (
+        SELECT Id_fecha 
+        FROM dim_fecha 
+        WHERE Ano = 2024 AND Mes = 12
+    )
+    SELECT 
+        FORMAT(COUNT(*), 0) AS `Número total de operaciones`, 
+        FORMAT(SUM(Cantidad), 2) AS `Importe total (€)`
+    FROM fact_table
+    WHERE Id_tipo_operacion IN (1, 7)
+    AND Id_fecha IN (SELECT Id_fecha FROM UltimoMes);
+    """
+
+    mycursor.execute(query)
+    result = mycursor.fetchone()
+
+    return jsonify(result)
+
+@app.route('/analyze_cash_flow', methods=['GET'])
+def analyze_cash_flow():
+    mycursor = mydb.cursor(dictionary=True)
+
+    query = """
+    WITH Fechas2024 AS (
+    SELECT Id_fecha, Mes 
+    FROM dim_fecha 
+    WHERE Ano = 2024
+),
+Operaciones2024 AS (
+    SELECT 
+        f.Id_fecha, 
+        f.Id_tipo_operacion, 
+        f.Cantidad, 
+        d.Mes
+    FROM fact_table f
+    INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
+    WHERE f.Id_tipo_operacion IN (2, 6, 12)
+),
+Entradas AS (
+    SELECT Mes, ROUND(SUM(Cantidad), 2) AS Entradas
+    FROM Operaciones2024
+    WHERE Id_tipo_operacion = 6
+    GROUP BY Mes
+),
+Salidas AS (
+    SELECT Mes, ROUND(SUM(Cantidad), 2) AS Salidas
+    FROM Operaciones2024
+    WHERE Id_tipo_operacion IN (2, 12)
+    GROUP BY Mes
+)
+SELECT 
+    CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
+    FORMAT(COALESCE(e.Entradas, 0), 2) AS `Entradas (€)`,
+    FORMAT(COALESCE(s.Salidas, 0), 2) AS `Salidas (€)`
+FROM Entradas e
+LEFT JOIN Salidas s ON e.Mes = s.Mes
+UNION DISTINCT
+SELECT 
+    CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
+    FORMAT(COALESCE(e.Entradas, 0), 2) AS `Entradas (€)`,
+    FORMAT(COALESCE(s.Salidas, 0), 2) AS `Salidas (€)`
+FROM Salidas s
+LEFT JOIN Entradas e ON s.Mes = e.Mes
+ORDER BY Mes;
+    """
+
+    mycursor.execute(query)
+    monthly_results = mycursor.fetchall()
+
+    totals_query = """
+    WITH Fechas2024 AS (
+        SELECT Id_fecha 
+        FROM dim_fecha 
+        WHERE Ano = 2024
+    ),
+    Operaciones2024 AS (
+        SELECT 
+            f.Id_tipo_operacion, 
+            f.Cantidad
+        FROM fact_table f
+        INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
+        WHERE f.Id_tipo_operacion IN (2, 6, 12)
+    ),
+    TotalEntradas AS (
+        SELECT ROUND(SUM(Cantidad), 2) AS Total_Entradas
+        FROM Operaciones2024
+        WHERE Id_tipo_operacion = 6
+    ),
+    TotalSalidas AS (
+        SELECT ROUND(SUM(Cantidad), 2) AS Total_Salidas
+        FROM Operaciones2024
+        WHERE Id_tipo_operacion IN (2, 12)
+    )
+    SELECT 
+        FORMAT(Total_Entradas, 2) AS `Total Entradas (€)`,
+        FORMAT(Total_Salidas, 2) AS `Total Salidas (€)`,
+        FORMAT(Total_Entradas - Total_Salidas, 2) AS `Balance Neto (€)`
+    FROM TotalEntradas, TotalSalidas;
+    """
+
+    mycursor.execute(totals_query)
+    totals_result = mycursor.fetchone()
+
+    response = {
+        "Flujo de dinero mensual 2024": monthly_results,
+        "Totales anuales": totals_result
+    }
+
+    return jsonify(response)
+
 
 # Ejecutar la aplicación
 if __name__ == '__main__':
