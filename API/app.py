@@ -32,7 +32,6 @@ def obtener_usuarios():
 # Ejecutar la aplicación
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()  # Crea las tablas si no existen
-    app.run(debug=True, host="0.0.0.0", port=5000)  # Asegurar que corre en 5000
-
+        db.create_all()  # Crear las tablas si no existen
+    app.run(debug=True, host="0.0.0.0", port=5000)  # Ejecutar la aplicación
 
