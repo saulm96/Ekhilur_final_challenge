@@ -15,8 +15,24 @@ async function getAllClients(req, res) {
     }
 }
 
+
+async function getClientPageData(req, res) {
+    try {
+        console.log('API Controller: Getting client page data');
+        const clientData = await clientController.getClientPageData();
+        console.log('API Controller: Got client page data');
+        res.status(200).json(clientData);
+    } catch (error) {
+        console.error('API Controller Error:', error);
+        res.status(error.status || 500).json({ 
+            error: error.message || 'Error al obtener los datos de la landing page'
+        });
+    }
+}
+
 export const clientApiController = {
-    getAllClients
+    getAllClients,
+    getClientPageData
 };
 
 export default clientApiController;
