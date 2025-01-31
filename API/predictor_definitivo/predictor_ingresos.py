@@ -36,13 +36,13 @@ def cargar_modelo_y_caracteristicas():
 def obtener_datos_historicos():
     """Obtiene los datos históricos de la base de datos"""
     try:
-        # Conectar a la base de datos
+        # Conectar a la base de datos usando el puerto interno de Docker
         mydb = mysql.connector.connect(
             host=os.getenv('DATA_DB_HOST'),
             user=os.getenv('DATA_DB_USER'),
             password=os.getenv('DATA_DB_PASSWORD'),
             database=os.getenv('DATA_DB_DATABASE'),
-            port=3306
+            port=3306  # Puerto interno en la red de Docker
         )
         
         # Crear un cursor
@@ -54,18 +54,19 @@ def obtener_datos_historicos():
             df.Fecha,
             o.Operacion,
             u.Tipo_usuario,
-            f.Cantidad,
+            CAST(f.Cantidad AS FLOAT) as Cantidad,
             'Ingresos' as Tipo_Flujo
         FROM fact_table f
-        JOIN dim_fecha df ON f.Id_fecha = df.Id_fecha
-        JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
-        JOIN dim_usuarios u ON f.Usuario_emisor = u.Id_usuario
+        LEFT JOIN dim_fecha df ON f.Id_fecha = df.Id_fecha
+        LEFT JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
+        LEFT JOIN dim_usuarios u ON f.Usuario_emisor = u.Id_usuario
         WHERE o.Operacion IN (
             'Cuota mensual de socio',
             'Cuota variable',
             'Comisión por retirada',
             'Cuota de socio'
         )
+        AND df.Fecha BETWEEN '2024-01-01' AND '2024-12-31'
         """
         
         # Ejecutar la consulta
@@ -76,6 +77,9 @@ def obtener_datos_historicos():
         
         # Crear DataFrame
         df = pd.DataFrame(resultados, columns=['Fecha', 'Operacion', 'Tipo_usuario', 'Cantidad', 'Tipo_Flujo'])
+        
+        # Asegurarse de que Cantidad sea float
+        df['Cantidad'] = df['Cantidad'].astype(float)
         
         # Cerrar cursor y conexión
         cursor.close()
@@ -164,7 +168,33 @@ def predecir_mes_siguiente():
     try:
         # Cargar modelo y características
         modelo, caracteristicas = cargar_modelo_y_caracteristicas()
-        stats_historicas = obtener_estadisticas_historicas()
+        
+        print("Intentando obtener datos de la base de datos...")
+        # Intentar primero obtener datos de la base de datos
+        df = obtener_datos_historicos()
+        fuente_datos = {
+            "principal": "Base de datos",
+            "fallback": None,
+            "razon_fallback": None
+        }
+        
+        # Si falla la base de datos, usar CSV como respaldo
+        if df is None:
+            print("No se pudo obtener datos de la base de datos, usando CSV como respaldo...")
+            stats_historicas = obtener_estadisticas_historicas()
+            fuente_datos = {
+                "principal": "CSV",
+                "fallback": "Si",
+                "razon_fallback": "Error de conexión con la base de datos"
+            }
+        else:
+            print("Datos obtenidos exitosamente de la base de datos")
+            # Calcular estadísticas de la base de datos
+            df['Fecha'] = pd.to_datetime(df['Fecha'])
+            stats_historicas = df.groupby(['Operacion', 'Tipo_usuario']).agg({
+                'Cantidad': ['sum', 'count', 'mean']
+            }).reset_index()
+            stats_historicas.columns = ['Operacion', 'Tipo_usuario', 'Total', 'Num_Operaciones', 'Promedio_Operacion']
         
         # Determinar fecha inicio (mes siguiente al último dato)
         ultima_fecha = pd.Timestamp.now()
@@ -268,7 +298,12 @@ def predecir_mes_siguiente():
             'predicciones_por_operacion': {},
             'predicciones_por_usuario': {},
             'predicciones_diarias': predicciones_diarias.to_dict(),
-            'predicciones_futuras': predicciones_futuras
+            'predicciones_futuras': predicciones_futuras,
+            'fuente_datos': fuente_datos,
+            'metadata': {
+                'fecha_prediccion': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'version_modelo': caracteristicas.get('fecha_entrenamiento', 'Desconocida')
+            }
         }
 
         # Aplanar las predicciones por operación
@@ -442,10 +477,22 @@ def comparar_datos():
 def entrenar_modelo():
     """Entrena el modelo con los datos actuales de la base de datos"""
     try:
+        resultado = {
+            "estado": "error",
+            "mensaje": "",
+            "detalles": {}
+        }
+
+        # Crear directorio de modelos si no existe
+        models_dir = os.path.join(SCRIPT_DIR, 'models_history')
+        if not os.path.exists(models_dir):
+            os.makedirs(models_dir)
+
         print("Obteniendo datos para entrenamiento...")
         df = obtener_datos_historicos()
         if df is None:
-            raise Exception("No se pudieron obtener los datos de la base de datos")
+            resultado["mensaje"] = "No se pudieron obtener los datos de la base de datos"
+            return resultado
 
         # Preparar datos para entrenamiento
         df['Fecha'] = pd.to_datetime(df['Fecha'])
@@ -481,26 +528,294 @@ def entrenar_modelo():
             max_depth=6,
             random_state=42
         )
+        
+        # Registrar tiempo de inicio del entrenamiento
+        tiempo_inicio = pd.Timestamp.now()
+        
         modelo.fit(X, y)
+        
+        # Registrar tiempo de fin del entrenamiento
+        tiempo_fin = pd.Timestamp.now()
+        duracion_entrenamiento = (tiempo_fin - tiempo_inicio).total_seconds()
 
-        # Guardar modelo y características
+        # Guardar modelo y características con versión
         caracteristicas = {
             'categorias_operacion': categorias_operacion,
-            'categorias_tipo_usuario': categorias_tipo_usuario
+            'categorias_tipo_usuario': categorias_tipo_usuario,
+            'fecha_entrenamiento': tiempo_inicio.strftime('%Y-%m-%d %H:%M:%S'),
+            'rango_datos': {
+                'inicio': df['Fecha'].min().strftime('%Y-%m-%d'),
+                'fin': df['Fecha'].max().strftime('%Y-%m-%d')
+            }
         }
 
-        with open(os.path.join(SCRIPT_DIR, 'modelo_ingresos_xgboost.pkl'), 'wb') as f:
+        # Generar nombre de versión basado en la fecha
+        version = tiempo_inicio.strftime('%Y%m%d_%H%M%S')
+        modelo_version_path = os.path.join(models_dir, f'modelo_ingresos_xgboost_{version}.pkl')
+        caract_version_path = os.path.join(models_dir, f'caracteristicas_modelo_{version}.pkl')
+
+        # Guardar versión del modelo
+        with open(modelo_version_path, 'wb') as f:
             pickle.dump(modelo, f)
         
-        with open(os.path.join(SCRIPT_DIR, 'caracteristicas_modelo.pkl'), 'wb') as f:
+        with open(caract_version_path, 'wb') as f:
             pickle.dump(caracteristicas, f)
 
+        # Guardar también como modelo actual
+        modelo_path = os.path.join(SCRIPT_DIR, 'modelo_ingresos_xgboost.pkl')
+        caract_path = os.path.join(SCRIPT_DIR, 'caracteristicas_modelo.pkl')
+
+        with open(modelo_path, 'wb') as f:
+            pickle.dump(modelo, f)
+        
+        with open(caract_path, 'wb') as f:
+            pickle.dump(caracteristicas, f)
+
+        # Preparar detalles del entrenamiento
+        resultado["estado"] = "exitoso"
+        resultado["mensaje"] = "Modelo entrenado y guardado exitosamente"
+        resultado["detalles"] = {
+            "fecha_entrenamiento": tiempo_inicio.strftime('%Y-%m-%d %H:%M:%S'),
+            "duracion_entrenamiento_segundos": duracion_entrenamiento,
+            "numero_registros_entrenamiento": len(df),
+            "rango_fechas_datos": {
+                "inicio": df['Fecha'].min().strftime('%Y-%m-%d'),
+                "fin": df['Fecha'].max().strftime('%Y-%m-%d')
+            },
+            "categorias_operacion": categorias_operacion,
+            "categorias_tipo_usuario": categorias_tipo_usuario,
+            "parametros_modelo": {
+                "n_estimators": 100,
+                "learning_rate": 0.1,
+                "max_depth": 6
+            },
+            "archivos_generados": {
+                "modelo_actual": modelo_path,
+                "caracteristicas_actual": caract_path,
+                "modelo_version": modelo_version_path,
+                "caracteristicas_version": caract_version_path,
+                "version": version
+            }
+        }
+
         print("Modelo entrenado y guardado exitosamente")
-        return True
+        return resultado
 
     except Exception as e:
-        print(f"Error entrenando el modelo: {str(e)}")
-        return False
+        resultado["estado"] = "error"
+        resultado["mensaje"] = f"Error entrenando el modelo: {str(e)}"
+        return resultado
+
+def predecir_mes_siguiente_csv():
+    """Realiza predicciones para el próximo mes usando solo CSV"""
+    try:
+        # Cargar modelo y características
+        modelo, caracteristicas = cargar_modelo_y_caracteristicas()
+        stats_historicas = obtener_estadisticas_historicas()  # Esta función ya usa CSV
+        
+        # Determinar fecha inicio (mes siguiente al último dato)
+        ultima_fecha = pd.Timestamp.now()
+        fecha_inicio = (ultima_fecha.replace(day=1) + pd.DateOffset(months=1))
+        dias_siguiente_mes = pd.date_range(
+            start=fecha_inicio,
+            end=fecha_inicio + pd.DateOffset(months=1) - pd.DateOffset(days=1),
+            freq='D'
+        )
+        
+        # Preparar características para predicción
+        X_futuro = pd.DataFrame()
+        X_futuro['Mes'] = dias_siguiente_mes.month
+        X_futuro['DiaSemana'] = dias_siguiente_mes.dayofweek
+        X_futuro['DiaDelMes'] = dias_siguiente_mes.day
+        X_futuro['EsFinDeSemana'] = X_futuro['DiaSemana'].isin([5,6]).astype(int)
+        X_futuro['Semana'] = ((X_futuro['DiaDelMes'] - 1) // 7 + 1).astype(int)
+        
+        # Generar predicciones
+        predicciones_futuras = []
+        for op in caracteristicas['categorias_operacion']:
+            for user in caracteristicas['categorias_tipo_usuario']:
+                X_temp = X_futuro.copy()
+                
+                # Codificar variables categóricas
+                X_temp['Operacion'] = pd.Categorical([op] * len(X_futuro), 
+                                                   categories=caracteristicas['categorias_operacion']).codes
+                X_temp['Tipo_usuario'] = pd.Categorical([user] * len(X_futuro), 
+                                                      categories=caracteristicas['categorias_tipo_usuario']).codes
+                
+                # Ajustar características según estadísticas históricas
+                if stats_historicas is not None:
+                    stats_op = stats_historicas[stats_historicas['Operacion'] == op]
+                    stats_op_user = stats_op[stats_op['Tipo_usuario'] == user]
+                    
+                    if not stats_op_user.empty:
+                        total_mensual = stats_op_user['Total'].values[0]
+                        num_ops_mensual = stats_op_user['Num_Operaciones'].values[0]
+                        promedio_por_op = stats_op_user['Promedio_Operacion'].values[0]
+                        
+                        total_diario = total_mensual / len(dias_siguiente_mes)
+                        ops_por_dia = num_ops_mensual / len(dias_siguiente_mes)
+                        
+                        X_temp['Num_Operaciones'] = ops_por_dia
+                        X_temp['Promedio_Operacion'] = promedio_por_op
+                    else:
+                        X_temp['Num_Operaciones'] = 0
+                        X_temp['Promedio_Operacion'] = 0
+                else:
+                    X_temp['Num_Operaciones'] = 0
+                    X_temp['Promedio_Operacion'] = 0
+                
+                # Predicción
+                pred = modelo.predict(X_temp)
+                pred = np.maximum(0, pred)
+                
+                # Ajustar predicciones según estadísticas históricas
+                if stats_historicas is not None and not stats_op_user.empty:
+                    total_mensual = stats_op_user['Total'].values[0]
+                    factor_ajuste = total_mensual / pred.sum() if pred.sum() > 0 else 0
+                    pred = pred * factor_ajuste
+                
+                # Guardar predicciones
+                for dia, prediccion in zip(dias_siguiente_mes, pred):
+                    if prediccion > 0:
+                        predicciones_futuras.append({
+                            'Fecha': dia.strftime('%d/%m/%Y'),
+                            'Operacion': op,
+                            'Tipo_usuario': user,
+                            'Prediccion': float(prediccion)
+                        })
+        
+        # Crear DataFrame con predicciones
+        df_predicciones = pd.DataFrame(predicciones_futuras)
+        
+        if not df_predicciones.empty:
+            predicciones_diarias = df_predicciones.groupby('Fecha')['Prediccion'].sum()
+        else:
+            predicciones_diarias = pd.Series(0, index=dias_siguiente_mes.strftime('%d/%m/%Y'))
+        
+        if predicciones_diarias.sum() == 0:
+            return {"error": "Todas las predicciones son cero. Verifica el modelo y los datos de entrada."}
+        
+        # Generar informe usando la misma función que usa predecir_mes_siguiente_db
+        informe = generar_informe(df_predicciones, predicciones_diarias)
+        informe['fuente_datos'] = 'CSV'
+        
+        return informe
+        
+    except Exception as e:
+        return {'error': str(e)}
+
+def predecir_mes_siguiente_db():
+    """Realiza predicciones para el próximo mes usando solo la base de datos"""
+    try:
+        # Cargar modelo y características
+        modelo, caracteristicas = cargar_modelo_y_caracteristicas()
+        
+        # Obtener datos históricos de la base de datos
+        df = obtener_datos_historicos()
+        if df is None:
+            raise Exception("No se pudieron obtener datos de la base de datos")
+        
+        # Determinar fecha inicio
+        ultima_fecha = pd.Timestamp.now()
+        fecha_inicio = (ultima_fecha.replace(day=1) + pd.DateOffset(months=1))
+        dias_siguiente_mes = pd.date_range(
+            start=fecha_inicio,
+            end=fecha_inicio + pd.DateOffset(months=1) - pd.DateOffset(days=1),
+            freq='D'
+        )
+        
+        # Preparar características para predicción
+        X_futuro = pd.DataFrame()
+        X_futuro['Mes'] = dias_siguiente_mes.month
+        X_futuro['DiaSemana'] = dias_siguiente_mes.dayofweek
+        X_futuro['DiaDelMes'] = dias_siguiente_mes.day
+        X_futuro['EsFinDeSemana'] = X_futuro['DiaSemana'].isin([5,6]).astype(int)
+        X_futuro['Semana'] = ((X_futuro['DiaDelMes'] - 1) // 7 + 1).astype(int)
+        
+        # Calcular estadísticas de la base de datos
+        df['Fecha'] = pd.to_datetime(df['Fecha'])
+        
+        # Filtrar datos del mismo mes del año anterior
+        mes_prediccion = fecha_inicio
+        mes_historico = mes_prediccion - pd.DateOffset(years=1)
+        mask_mes_historico = (df['Fecha'].dt.year == mes_historico.year) & \
+                           (df['Fecha'].dt.month == mes_historico.month)
+        df_mes_historico = df[mask_mes_historico]
+        
+        # Calcular estadísticas solo con los datos del mes histórico
+        stats_db = df_mes_historico.groupby(['Operacion', 'Tipo_usuario']).agg({
+            'Cantidad': ['sum', 'count', 'mean']
+        }).reset_index()
+        stats_db.columns = ['Operacion', 'Tipo_usuario', 'Total', 'Num_Operaciones', 'Promedio_Operacion']
+        
+        # Generar predicciones
+        predicciones_futuras = []
+        for op in caracteristicas['categorias_operacion']:
+            for user in caracteristicas['categorias_tipo_usuario']:
+                X_temp = X_futuro.copy()
+                
+                # Codificar variables categóricas
+                X_temp['Operacion'] = pd.Categorical([op] * len(X_futuro), 
+                                                   categories=caracteristicas['categorias_operacion']).codes
+                X_temp['Tipo_usuario'] = pd.Categorical([user] * len(X_futuro), 
+                                                      categories=caracteristicas['categorias_tipo_usuario']).codes
+                
+                # Ajustar características según estadísticas de la base de datos
+                stats_op_user = stats_db[(stats_db['Operacion'] == op) & (stats_db['Tipo_usuario'] == user)]
+                
+                if not stats_op_user.empty:
+                    total_mensual = stats_op_user['Total'].values[0]
+                    num_ops_mensual = stats_op_user['Num_Operaciones'].values[0]
+                    promedio_por_op = stats_op_user['Promedio_Operacion'].values[0]
+                    
+                    total_diario = total_mensual / len(dias_siguiente_mes)
+                    ops_por_dia = num_ops_mensual / len(dias_siguiente_mes)
+                    
+                    X_temp['Num_Operaciones'] = ops_por_dia
+                    X_temp['Promedio_Operacion'] = promedio_por_op
+                else:
+                    X_temp['Num_Operaciones'] = 0
+                    X_temp['Promedio_Operacion'] = 0
+                
+                # Predicción
+                pred = modelo.predict(X_temp)
+                pred = np.maximum(0, pred)
+                
+                # Ajustar predicciones según estadísticas
+                if not stats_op_user.empty:
+                    total_mensual = stats_op_user['Total'].values[0]
+                    factor_ajuste = total_mensual / pred.sum() if pred.sum() > 0 else 0
+                    pred = pred * factor_ajuste
+                
+                # Guardar predicciones
+                for dia, prediccion in zip(dias_siguiente_mes, pred):
+                    if prediccion > 0:
+                        predicciones_futuras.append({
+                            'Fecha': dia.strftime('%d/%m/%Y'),
+                            'Operacion': op,
+                            'Tipo_usuario': user,
+                            'Prediccion': float(prediccion)
+                        })
+        
+        # Crear DataFrame con predicciones
+        df_predicciones = pd.DataFrame(predicciones_futuras)
+        
+        if not df_predicciones.empty:
+            predicciones_diarias = df_predicciones.groupby('Fecha')['Prediccion'].sum()
+        else:
+            predicciones_diarias = pd.Series(0, index=dias_siguiente_mes.strftime('%d/%m/%Y'))
+        
+        if predicciones_diarias.sum() == 0:
+            raise Exception("No se generaron predicciones válidas")
+        
+        # Generar informe completo
+        informe = generar_informe(df_predicciones, predicciones_diarias)
+        informe['fuente_datos'] = 'Base de datos'
+        
+        return informe
+        
+    except Exception as e:
+        return {'error': str(e)}
 
 def main():
     """Función principal"""
@@ -517,6 +832,107 @@ def main():
     
     except Exception as e:
         return {"error": str(e)}
+
+def listar_versiones():
+    """Lista todas las versiones disponibles del modelo"""
+    try:
+        models_dir = os.path.join(SCRIPT_DIR, 'models_history')
+        if not os.path.exists(models_dir):
+            return {
+                "estado": "error",
+                "mensaje": "No existe el directorio de histórico de modelos",
+                "versiones": []
+            }
+        
+        versiones = []
+        for archivo in os.listdir(models_dir):
+            if archivo.startswith('caracteristicas_modelo_') and archivo.endswith('.pkl'):
+                version = archivo.replace('caracteristicas_modelo_', '').replace('.pkl', '')
+                caract_path = os.path.join(models_dir, archivo)
+                
+                try:
+                    with open(caract_path, 'rb') as f:
+                        caracteristicas = pickle.load(f)
+                    
+                    versiones.append({
+                        "version": version,
+                        "fecha_entrenamiento": caracteristicas.get('fecha_entrenamiento', 'Desconocida'),
+                        "rango_datos": caracteristicas.get('rango_datos', {
+                            'inicio': 'Desconocido',
+                            'fin': 'Desconocido'
+                        })
+                    })
+                except Exception as e:
+                    print(f"Error leyendo características de versión {version}: {str(e)}")
+        
+        return {
+            "estado": "exitoso",
+            "mensaje": f"Se encontraron {len(versiones)} versiones",
+            "versiones": sorted(versiones, key=lambda x: x['version'], reverse=True)
+        }
+    
+    except Exception as e:
+        return {
+            "estado": "error",
+            "mensaje": f"Error listando versiones: {str(e)}",
+            "versiones": []
+        }
+
+def revertir_modelo(version):
+    """Revierte el modelo a una versión específica"""
+    try:
+        models_dir = os.path.join(SCRIPT_DIR, 'models_history')
+        modelo_version_path = os.path.join(models_dir, f'modelo_ingresos_xgboost_{version}.pkl')
+        caract_version_path = os.path.join(models_dir, f'caracteristicas_modelo_{version}.pkl')
+        
+        # Verificar que existan los archivos
+        if not os.path.exists(modelo_version_path) or not os.path.exists(caract_version_path):
+            return {
+                "estado": "error",
+                "mensaje": f"No se encuentra la versión {version} del modelo",
+                "detalles": {}
+            }
+        
+        # Cargar la versión antigua para verificar que sea válida
+        try:
+            with open(modelo_version_path, 'rb') as f:
+                modelo = pickle.load(f)
+            with open(caract_version_path, 'rb') as f:
+                caracteristicas = pickle.load(f)
+        except Exception as e:
+            return {
+                "estado": "error",
+                "mensaje": f"Error al cargar la versión {version}: {str(e)}",
+                "detalles": {}
+            }
+        
+        # Copiar los archivos a la ubicación actual
+        modelo_actual_path = os.path.join(SCRIPT_DIR, 'modelo_ingresos_xgboost.pkl')
+        caract_actual_path = os.path.join(SCRIPT_DIR, 'caracteristicas_modelo.pkl')
+        
+        import shutil
+        shutil.copy2(modelo_version_path, modelo_actual_path)
+        shutil.copy2(caract_version_path, caract_actual_path)
+        
+        return {
+            "estado": "exitoso",
+            "mensaje": f"Modelo revertido exitosamente a la versión {version}",
+            "detalles": {
+                "version": version,
+                "fecha_entrenamiento": caracteristicas.get('fecha_entrenamiento', 'Desconocida'),
+                "rango_datos": caracteristicas.get('rango_datos', {
+                    'inicio': 'Desconocido',
+                    'fin': 'Desconocido'
+                })
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "estado": "error",
+            "mensaje": f"Error al revertir el modelo: {str(e)}",
+            "detalles": {}
+        }
 
 if __name__ == "__main__":
     print("Entrenando nuevo modelo con datos de la base de datos...")

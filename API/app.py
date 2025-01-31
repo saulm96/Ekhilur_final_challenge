@@ -463,11 +463,87 @@ def suma_por_tipo_de_transaccion():
 # Endpoint para predicciones
 @app.route('/predict', methods=['GET'])
 def predict():
+    """
+    Endpoint principal para predicciones usando la base de datos
+    """
     try:
-        informe = main()
-        return jsonify(informe)
+        from predictor_definitivo.predictor_ingresos import predecir_mes_siguiente_db
+        resultado = predecir_mes_siguiente_db()
+        return jsonify(resultado)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/predict/csv', methods=['GET'])
+def predict_csv():
+    """
+    Endpoint para realizar predicciones usando solo datos de CSV
+    """
+    try:
+        from predictor_definitivo.predictor_ingresos import predecir_mes_siguiente_csv
+        resultado = predecir_mes_siguiente_csv()
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/predict/db', methods=['GET'])
+def predict_db():
+    """
+    Endpoint para realizar predicciones usando solo datos de la base de datos
+    """
+    try:
+        from predictor_definitivo.predictor_ingresos import predecir_mes_siguiente_db
+        resultado = predecir_mes_siguiente_db()
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/model/retrain', methods=['POST'])
+def retrain_model():
+    """
+    Endpoint para reentrenar el modelo con los datos más recientes
+    """
+    try:
+        from predictor_definitivo.predictor_ingresos import entrenar_modelo
+        resultado = entrenar_modelo()
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({
+            "estado": "error",
+            "mensaje": f"Error al reentrenar el modelo: {str(e)}",
+            "detalles": {}
+        }), 500
+
+@app.route('/model/versions', methods=['GET'])
+def list_model_versions():
+    """
+    Endpoint para listar todas las versiones disponibles del modelo
+    """
+    try:
+        from predictor_definitivo.predictor_ingresos import listar_versiones
+        resultado = listar_versiones()
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({
+            "estado": "error",
+            "mensaje": f"Error al listar versiones: {str(e)}",
+            "versiones": []
+        }), 500
+
+@app.route('/model/revert/<version>', methods=['POST'])
+def revert_model_version(version):
+    """
+    Endpoint para revertir el modelo a una versión específica
+    """
+    try:
+        from predictor_definitivo.predictor_ingresos import revertir_modelo
+        resultado = revertir_modelo(version)
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({
+            "estado": "error",
+            "mensaje": f"Error al revertir el modelo: {str(e)}",
+            "detalles": {}
+        }), 500
 
 # Ejecutar la aplicación
 if __name__ == '__main__':
