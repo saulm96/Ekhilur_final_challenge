@@ -5,7 +5,8 @@ import mysql.connector
 from dotenv import load_dotenv
 import os
 import time
-from predictor.predictor_ingresos import predecir_mes_siguiente
+from predictor_definitivo.predictor_ingresos import predecir_mes_siguiente, generar_informe, main
+import pandas as pd
 
 load_dotenv()
 
@@ -459,12 +460,14 @@ def suma_por_tipo_de_transaccion():
     resultado = mycursor.fetchall()
     return jsonify(resultado)
 
-# endpoint predictor
+# Endpoint para predicciones
 @app.route('/predict', methods=['GET'])
-def predictor():
-    mycursor = mydb.cursor(dictionary=True)
-    resultado = predecir_mes_siguiente()
-    return jsonify(resultado)
+def predict():
+    try:
+        informe = main()
+        return jsonify(informe)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Ejecutar la aplicación
 if __name__ == '__main__':
