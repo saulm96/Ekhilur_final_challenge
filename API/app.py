@@ -313,6 +313,30 @@ ORDER BY Mes;
     return jsonify(response)
 # fin Nuevos 5 endpoint para landingpage "ekhilur"
 
+#Nueva endpoint 1 - Gráfico de barras por cantidad de usuarios y grupo de edad
+@app.route('/cantidad-usuarios-grupo-edad', methods=['GET'])
+def cantidad_usuarios_grupo_edad():
+    mycursor = mydb.cursor(dictionary=True)
+    mycursor.execute("""
+        SELECT
+            CASE
+                WHEN Edad BETWEEN 18 AND 25 THEN '18-25'
+                WHEN Edad BETWEEN 26 AND 35 THEN '26-35'
+                WHEN Edad BETWEEN 36 AND 45 THEN '36-45'
+                WHEN Edad BETWEEN 46 AND 55 THEN '46-55'
+                WHEN Edad BETWEEN 56 AND 65 THEN '56-65'
+                WHEN Edad > 65 THEN '65+'
+                ELSE 'Desconocido'
+            END AS Grupo_edad,
+            COUNT(*) AS cantidad_usuarios
+        FROM dim_usuarios
+        WHERE Edad IS NOT NULL
+        GROUP BY Grupo_edad
+        ORDER BY Grupo_edad
+    """)
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
 # Ejecutar la aplicación
 if __name__ == '__main__':
     with app.app_context():
