@@ -311,7 +311,7 @@ ORDER BY Mes;
     }
 
     return jsonify(response)
-
+# fin Nuevos 5 endpoint para landingpage "ekhilur"
 
 # Ejecutar la aplicación
 if __name__ == '__main__':
