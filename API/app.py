@@ -208,8 +208,8 @@ def analyze_total_simple():
         WHERE Ano = 2024 AND Mes = 12
     )
     SELECT 
-        FORMAT(COUNT(*), 0) AS `Número total de operaciones`, 
-        FORMAT(SUM(Cantidad), 2) AS `Importe total (€)`
+        COUNT(*) AS `Número total de operaciones`, 
+        ROUND(SUM(Cantidad), 2) AS `Importe total (€)`
     FROM fact_table
     WHERE Id_tipo_operacion IN (1, 7)
     AND Id_fecha IN (SELECT Id_fecha FROM UltimoMes);
@@ -224,53 +224,55 @@ def analyze_total_simple():
 def analyze_cash_flow():
     mycursor = mydb.cursor(dictionary=True)
 
+    # Consulta para obtener el flujo de caja mensual
     query = """
     WITH Fechas2024 AS (
-    SELECT Id_fecha, Mes 
-    FROM dim_fecha 
-    WHERE Ano = 2024
-),
-Operaciones2024 AS (
+        SELECT Id_fecha, Mes 
+        FROM dim_fecha 
+        WHERE Ano = 2024
+    ),
+    Operaciones2024 AS (
+        SELECT 
+            f.Id_fecha, 
+            f.Id_tipo_operacion, 
+            f.Cantidad, 
+            d.Mes
+        FROM fact_table f
+        INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
+        WHERE f.Id_tipo_operacion IN (2, 6, 12)
+    ),
+    Entradas AS (
+        SELECT Mes, ROUND(SUM(Cantidad), 2) AS Entradas
+        FROM Operaciones2024
+        WHERE Id_tipo_operacion = 6
+        GROUP BY Mes
+    ),
+    Salidas AS (
+        SELECT Mes, ROUND(SUM(Cantidad), 2) AS Salidas
+        FROM Operaciones2024
+        WHERE Id_tipo_operacion IN (2, 12)
+        GROUP BY Mes
+    )
     SELECT 
-        f.Id_fecha, 
-        f.Id_tipo_operacion, 
-        f.Cantidad, 
-        d.Mes
-    FROM fact_table f
-    INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
-    WHERE f.Id_tipo_operacion IN (2, 6, 12)
-),
-Entradas AS (
-    SELECT Mes, ROUND(SUM(Cantidad), 2) AS Entradas
-    FROM Operaciones2024
-    WHERE Id_tipo_operacion = 6
-    GROUP BY Mes
-),
-Salidas AS (
-    SELECT Mes, ROUND(SUM(Cantidad), 2) AS Salidas
-    FROM Operaciones2024
-    WHERE Id_tipo_operacion IN (2, 12)
-    GROUP BY Mes
-)
-SELECT 
-    CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
-    FORMAT(COALESCE(e.Entradas, 0), 2) AS `Entradas (€)`,
-    FORMAT(COALESCE(s.Salidas, 0), 2) AS `Salidas (€)`
-FROM Entradas e
-LEFT JOIN Salidas s ON e.Mes = s.Mes
-UNION DISTINCT
-SELECT 
-    CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
-    FORMAT(COALESCE(e.Entradas, 0), 2) AS `Entradas (€)`,
-    FORMAT(COALESCE(s.Salidas, 0), 2) AS `Salidas (€)`
-FROM Salidas s
-LEFT JOIN Entradas e ON s.Mes = e.Mes
-ORDER BY Mes;
+        CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
+        COALESCE(e.Entradas, 0) AS `Entradas (€)`,
+        COALESCE(s.Salidas, 0) AS `Salidas (€)`
+    FROM Entradas e
+    LEFT JOIN Salidas s ON e.Mes = s.Mes
+    UNION DISTINCT
+    SELECT 
+        CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
+        COALESCE(e.Entradas, 0) AS `Entradas (€)`,
+        COALESCE(s.Salidas, 0) AS `Salidas (€)`
+    FROM Salidas s
+    LEFT JOIN Entradas e ON s.Mes = e.Mes
+    ORDER BY Mes;
     """
 
     mycursor.execute(query)
     monthly_results = mycursor.fetchall()
 
+    # Consulta para obtener los totales anuales
     totals_query = """
     WITH Fechas2024 AS (
         SELECT Id_fecha 
@@ -296,9 +298,9 @@ ORDER BY Mes;
         WHERE Id_tipo_operacion IN (2, 12)
     )
     SELECT 
-        FORMAT(Total_Entradas, 2) AS `Total Entradas (€)`,
-        FORMAT(Total_Salidas, 2) AS `Total Salidas (€)`,
-        FORMAT(Total_Entradas - Total_Salidas, 2) AS `Balance Neto (€)`
+        Total_Entradas AS `Total Entradas (€)`,
+        Total_Salidas AS `Total Salidas (€)`,
+        (Total_Entradas - Total_Salidas) AS `Balance Neto (€)`
     FROM TotalEntradas, TotalSalidas;
     """
 
@@ -311,6 +313,7 @@ ORDER BY Mes;
     }
 
     return jsonify(response)
+
 # fin Nuevos 5 endpoint para landingpage "ekhilur"
 
 #Nueva endpoint 1 - Gráfico de barras por cantidad de usuarios y grupo de edad
@@ -436,6 +439,21 @@ def transacciones_por_horas():
         WHERE fact_table.Id_tipo_operacion IN (1, 7)
         GROUP BY HOUR(Hora_transaccion)
         ORDER BY HOUR(Hora_transaccion);
+    """)
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
+# Nuevo endpoint 7 - "TRANSACCIONES" La suma por para cada tipo de transacción
+@app.route('/suma_por_tipo_de_transaccion', methods=['GET'])
+def suma_por_tipo_de_transaccion():
+    mycursor = mydb.cursor(dictionary=True)
+
+    # La suma por para cada tipo de transacción
+    mycursor.execute("""
+        SELECT o.Operacion, SUM(f.Cantidad) AS Total_Cantidad, COUNT(f.Id_transaccion) AS Total_Transacciones 
+        FROM fact_table f
+        LEFT JOIN dim_operaciones o ON o.Id_tipo_operacion = f.Id_tipo_operacion
+        GROUP BY o.Operacion;
     """)
     resultado = mycursor.fetchall()
     return jsonify(resultado)
