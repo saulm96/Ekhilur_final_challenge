@@ -18,7 +18,6 @@ const fetchWithRetry = async (url, retries = 3, delay = 1000) => {
             return response.data;
         } catch (error) {
             if (i === retries - 1) throw error; // Si es el último intento, propagar el error
-            console.log(`Intento ${i + 1} fallido para ${url}, reintentando...`);
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
@@ -26,7 +25,6 @@ const fetchWithRetry = async (url, retries = 3, delay = 1000) => {
 
 const getLandingPageData = async () => {
     try {
-        console.log('Fetching landing page data from DATA API');
         
         // Hacer las llamadas de forma secuencial para evitar sobrecarga
         const usersAnalysis = await fetchWithRetry(`${DATA_API_URL}/analyze_users`);
