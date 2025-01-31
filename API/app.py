@@ -19,20 +19,13 @@ def wait_for_db():
                 database=os.getenv('DATA_DB_DATABASE'),
                 port=3306  # Puerto interno de Docker
             )
-            print("¡Conexión a la base de datos exitosa!")
             return mydb
         except Exception as e:
             if i < max_tries - 1:  # si no es el último intento
-                print(f"Intento {i+1}: No se pudo conectar a la base de datos. Reintentando en 2 segundos...")
                 time.sleep(2)
             else:
-                print(f"Error final conectando a la base de datos: {str(e)}")
                 raise
 
-print("Variables de entorno cargadas:")
-print(f"DATA_DB_HOST: {os.getenv('DATA_DB_HOST')}")
-print(f"DATA_DB_USER: {os.getenv('DATA_DB_USER')}")
-print(f"DATA_DB_DATABASE: {os.getenv('DATA_DB_DATABASE')}")
 
 # Intentar conectar a la base de datos con reintentos
 mydb = wait_for_db()
@@ -445,7 +438,6 @@ if __name__ == '__main__':
     with app.app_context():
         try:
             db.create_all()
-            print("¡Tablas creadas exitosamente!")
         except Exception as e:
             print(f"Error creando tablas: {str(e)}")
     

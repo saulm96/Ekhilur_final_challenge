@@ -5,7 +5,7 @@ dotenv.config();
 const SECRET = process.env.JWT_SECRET;
 
 function sign(data, expiresIn = '1d') {
-  const token = jwt.sign(data, SECRET, { expiresIn: 1 });
+  const token = jwt.sign(data, SECRET, { expiresIn});
   return token;
   }
   
