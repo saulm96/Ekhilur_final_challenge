@@ -5,6 +5,7 @@ import mysql.connector
 from dotenv import load_dotenv
 import os
 import time
+from predictor.predictor_ingresos import predecir_mes_siguiente
 
 load_dotenv()
 
@@ -456,6 +457,13 @@ def suma_por_tipo_de_transaccion():
         GROUP BY o.Operacion;
     """)
     resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
+# endpoint predictor
+@app.route('/predict', methods=['GET'])
+def predictor():
+    mycursor = mydb.cursor(dictionary=True)
+    resultado = predecir_mes_siguiente()
     return jsonify(resultado)
 
 # Ejecutar la aplicación
