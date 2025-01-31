@@ -1,6 +1,5 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
 import mysql.connector
 from dotenv import load_dotenv
 import os
@@ -19,20 +18,13 @@ def wait_for_db():
                 database=os.getenv('DATA_DB_DATABASE'),
                 port=3306  # Puerto interno de Docker
             )
-            print("¡Conexión a la base de datos exitosa!")
             return mydb
         except Exception as e:
             if i < max_tries - 1:  # si no es el último intento
-                print(f"Intento {i+1}: No se pudo conectar a la base de datos. Reintentando en 2 segundos...")
                 time.sleep(2)
             else:
-                print(f"Error final conectando a la base de datos: {str(e)}")
                 raise
 
-print("Variables de entorno cargadas:")
-print(f"DATA_DB_HOST: {os.getenv('DATA_DB_HOST')}")
-print(f"DATA_DB_USER: {os.getenv('DATA_DB_USER')}")
-print(f"DATA_DB_DATABASE: {os.getenv('DATA_DB_DATABASE')}")
 
 # Intentar conectar a la base de datos con reintentos
 mydb = wait_for_db()
@@ -47,11 +39,7 @@ CORS(app, resources={
     }
 })
 
-# Configuración de SQLAlchemy
-app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+mysqlconnector://{os.getenv('DATA_DB_USER')}:{os.getenv('DATA_DB_PASSWORD')}@{os.getenv('DATA_DB_HOST')}:3306/{os.getenv('DATA_DB_DATABASE')}"
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app)
 
 @app.route('/')
 def home():
@@ -463,8 +451,7 @@ if __name__ == '__main__':
     with app.app_context():
         try:
             db.create_all()
-            print("¡Tablas creadas exitosamente!")
         except Exception as e:
-            print(f"Error creando tablas: {str(e)}")
+            pass
     
     app.run(debug=True, host="0.0.0.0", port= 5000);

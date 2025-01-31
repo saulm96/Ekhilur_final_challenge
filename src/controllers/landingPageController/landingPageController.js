@@ -18,7 +18,6 @@ const fetchWithRetry = async (url, retries = 3, delay = 1000) => {
             return response.data;
         } catch (error) {
             if (i === retries - 1) throw error; // Si es el último intento, propagar el error
-            console.log(`Intento ${i + 1} fallido para ${url}, reintentando...`);
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
@@ -26,23 +25,17 @@ const fetchWithRetry = async (url, retries = 3, delay = 1000) => {
 
 const getLandingPageData = async () => {
     try {
-        console.log('Fetching landing page data from DATA API');
         
         // Hacer las llamadas de forma secuencial para evitar sobrecarga
         const usersAnalysis = await fetchWithRetry(`${DATA_API_URL}/analyze_users`);
-        console.log('Users analysis data fetched successfully');
         
         const monthlyAverage = await fetchWithRetry(`${DATA_API_URL}/analyze_monthly_average_simple`);
-        console.log('Monthly average data fetched successfully');
         
         const monthlySavings = await fetchWithRetry(`${DATA_API_URL}/analyze_monthly_savings`);
-        console.log('Monthly savings data fetched successfully');
         
         const totalOperations = await fetchWithRetry(`${DATA_API_URL}/analyze_total_simple`);
-        console.log('Total operations data fetched successfully');
         
         const cashFlow = await fetchWithRetry(`${DATA_API_URL}/analyze_cash_flow`);
-        console.log('Cash flow data fetched successfully');
 
         // Construir y retornar el objeto de respuesta consolidado
         const responseData = {
@@ -53,11 +46,9 @@ const getLandingPageData = async () => {
             cashFlowAnalysis: cashFlow
         };
 
-        console.log('All data fetched and consolidated successfully');
         return responseData;
 
     } catch (error) {
-        console.error('Error in landingPageController:', error.message);
         if (error.response) {
             console.error('Response error data:', error.response.data);
             console.error('Response error status:', error.response.status);

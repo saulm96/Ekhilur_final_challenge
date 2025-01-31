@@ -2,9 +2,7 @@ import landingPageController from './landingPageController.js';
 
 async function getLandingPageData(req, res) {
     try {
-        console.log('API Controller: Getting landing page data');
         const landingData = await landingPageController.getLandingPageData();
-        console.log('API Controller: Got landing page data');
         res.status(200).json(landingData);
     } catch (error) {
         console.error('API Controller Error:', error);
