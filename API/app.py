@@ -322,4 +322,4 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"Error creando tablas: {str(e)}")
     
-    app.run(debug=True, host="0.0.0.0", port=int(os.getenv('DATA_API_APP_PORT', 5000)))
+    app.run(debug=True, host="0.0.0.0", port= 5000);
