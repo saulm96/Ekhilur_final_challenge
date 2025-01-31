@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const DATA_API_URL = `http://${process.env.DATA_API_APP_HOST}:${process.env.DATA_API_APP_PORT}`;
+const DATA_API_URL = `http://${process.env.DATA_API_APP_HOST}:5000`;
 
 // Función de utilidad para hacer llamadas con reintentos
 const fetchWithRetry = async (url, retries = 3, delay = 1000) => {
