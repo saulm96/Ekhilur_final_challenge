@@ -1,6 +1,5 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
 import mysql.connector
 from dotenv import load_dotenv
 import os
@@ -40,11 +39,7 @@ CORS(app, resources={
     }
 })
 
-# Configuración de SQLAlchemy
-app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+mysqlconnector://{os.getenv('DATA_DB_USER')}:{os.getenv('DATA_DB_PASSWORD')}@{os.getenv('DATA_DB_HOST')}:3306/{os.getenv('DATA_DB_DATABASE')}"
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app)
 
 @app.route('/')
 def home():
@@ -439,6 +434,6 @@ if __name__ == '__main__':
         try:
             db.create_all()
         except Exception as e:
-            print(f"Error creando tablas: {str(e)}")
+            pass
     
     app.run(debug=True, host="0.0.0.0", port= 5000);
