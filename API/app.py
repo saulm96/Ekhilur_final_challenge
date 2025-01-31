@@ -440,6 +440,21 @@ def transacciones_por_horas():
     resultado = mycursor.fetchall()
     return jsonify(resultado)
 
+# Nuevo endpoint 7 - "TRANSACCIONES" La suma por para cada tipo de transacción
+@app.route('/suma_por_tipo_de_transaccion', methods=['GET'])
+def suma_por_tipo_de_transaccion():
+    mycursor = mydb.cursor(dictionary=True)
+
+    # La suma por para cada tipo de transacción
+    mycursor.execute("""
+        SELECT o.Operacion, SUM(f.Cantidad) AS Total_Cantidad, COUNT(f.Id_transaccion) AS Total_Transacciones 
+        FROM fact_table f
+        LEFT JOIN dim_operaciones o ON o.Id_tipo_operacion = f.Id_tipo_operacion
+        GROUP BY o.Operacion;
+    """)
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
 # Ejecutar la aplicación
 if __name__ == '__main__':
     with app.app_context():
