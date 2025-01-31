@@ -337,6 +337,109 @@ def cantidad_usuarios_grupo_edad():
     resultado = mycursor.fetchall()
     return jsonify(resultado)
 
+#Nueva endpoint 2 - Evolución del número de altas por mes
+@app.route('/evolucion-altas-mes', methods=['GET'])
+def evolucion_altas_mes():
+    mycursor = mydb.cursor(dictionary=True)
+    mycursor.execute("""
+        SELECT
+            F.Ano,
+            F.Mes,
+            COUNT(DISTINCT Id_usuario) AS total_usuarios
+        FROM dim_usuarios
+        LEFT JOIN dim_fecha AS F ON dim_usuarios.Id_fecha_alta = F.Id_fecha
+        WHERE Tipo_usuario = 'usuario'
+        GROUP BY F.Ano, F.Mes
+        ORDER BY F.Ano, F.Mes
+    """)
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
+# Nueva endpoint 3: Patrones G1 - Pie chart porcentaje de pagos con qr y porcentaje de pagos con app
+@app.route('/porcentaje-pagos-qr-app', methods=['GET'])
+def porcentaje_pagos_qr_app():
+    mycursor = mydb.cursor(dictionary=True)
+    mycursor.execute("""
+        WITH total AS (
+            SELECT COUNT(DISTINCT Id_transaccion) AS total_transacciones_global
+            FROM fact_table
+            WHERE Id_tipo_operacion IN (1, 7)
+        )
+        SELECT
+            t.Operacion,
+            COUNT(DISTINCT fact_table.Id_transaccion) AS total_transacciones,
+            ROUND(
+                (COUNT(DISTINCT fact_table.Id_transaccion) * 100.0) / total.total_transacciones_global, 2
+            ) AS porcentaje
+        FROM fact_table
+        LEFT JOIN dim_operaciones AS t ON fact_table.Id_tipo_operacion = t.Id_tipo_operacion
+        JOIN total ON 1=1
+        WHERE fact_table.Id_tipo_operacion IN (1, 7)
+        GROUP BY t.Operacion, fact_table.Id_tipo_operacion, total.total_transacciones_global
+        ORDER BY porcentaje DESC;
+    """)
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
+#nueva endpoint 4 - Transacciones por Grupo de Edad y Tipo de Operación
+@app.route('/transacciones-grupo-edad-operacion', methods=['GET'])
+def transacciones_grupo_edad_operacion():
+    mycursor = mydb.cursor(dictionary=True)
+    mycursor.execute("""
+        SELECT
+            CASE
+                WHEN U.Edad BETWEEN 18 AND 25 THEN '18-25'
+                WHEN U.Edad BETWEEN 26 AND 35 THEN '26-35'
+                WHEN U.Edad BETWEEN 36 AND 45 THEN '36-45'
+                WHEN U.Edad BETWEEN 46 AND 55 THEN '46-55'
+                WHEN U.Edad BETWEEN 56 AND 65 THEN '56-65'
+                WHEN U.Edad > 65 THEN '65+'
+                ELSE 'Desconocido'
+            END AS Grupo_edad,
+            F.Id_tipo_operacion,
+            COUNT(DISTINCT F.Id_transaccion) AS total_transacciones
+        FROM fact_table AS F
+        LEFT JOIN dim_usuarios AS U ON F.Usuario_emisor = U.Id_usuario
+        WHERE (F.Id_tipo_operacion = 1 OR F.Id_tipo_operacion = 7)
+          AND U.Tipo_usuario = 'usuario'
+        GROUP BY Grupo_edad, F.Id_tipo_operacion
+        ORDER BY Grupo_edad, F.Id_tipo_operacion;
+    """)
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
+#Nueva endpoint 5 - G3 Ticket medio QR, ticket medio App
+@app.route('/ticket-medio-qr-app', methods=['GET'])
+def ticket_medio_qr_app():
+    mycursor = mydb.cursor(dictionary=True)
+    mycursor.execute("""
+        SELECT
+            o.Operacion,
+            AVG(Cantidad) AS Ticket_medio
+        FROM fact_table
+        LEFT JOIN dim_operaciones AS o ON fact_table.Id_tipo_operacion = o.Id_tipo_operacion
+        WHERE fact_table.Id_tipo_operacion IN (1, 7)
+        GROUP BY o.Operacion;
+    """)
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
+#Nuevo endpoint 6 - Transacciones por horas
+@app.route('/transacciones-por-horas', methods=['GET'])
+def transacciones_por_horas():
+    mycursor = mydb.cursor(dictionary=True)
+    mycursor.execute("""
+        SELECT
+            HOUR(Hora_transaccion) AS Hora_Dia,
+            SUM(Cantidad) AS Promedio_Cantidad
+        FROM fact_table
+        WHERE fact_table.Id_tipo_operacion IN (1, 7)
+        GROUP BY HOUR(Hora_transaccion)
+        ORDER BY HOUR(Hora_transaccion);
+    """)
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
 # Ejecutar la aplicación
 if __name__ == '__main__':
     with app.app_context():
