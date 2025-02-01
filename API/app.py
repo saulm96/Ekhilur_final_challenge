@@ -399,26 +399,26 @@ ORDER BY Mes;
 
 # fin Nuevos 5 endpoint para landingpage "ekhilur"
 
+#ENDPOINTS PARA SECCION USUARIOS
 #Nueva endpoint 1 - Gráfico de barras por cantidad de usuarios y grupo de edad
 @app.route('/cantidad-usuarios-grupo-edad', methods=['GET'])
 def cantidad_usuarios_grupo_edad():
     mycursor = mydb.cursor(dictionary=True)
     mycursor.execute("""
         SELECT
-            CASE
-                WHEN Edad BETWEEN 18 AND 25 THEN '18-25'
-                WHEN Edad BETWEEN 26 AND 35 THEN '26-35'
-                WHEN Edad BETWEEN 36 AND 45 THEN '36-45'
-                WHEN Edad BETWEEN 46 AND 55 THEN '46-55'
-                WHEN Edad BETWEEN 56 AND 65 THEN '56-65'
-                WHEN Edad > 65 THEN '65+'
-                ELSE 'Desconocido'
-            END AS Grupo_edad,
-            COUNT(*) AS cantidad_usuarios
-        FROM dim_usuarios
-        WHERE Edad IS NOT NULL
-        GROUP BY Grupo_edad
-        ORDER BY Grupo_edad
+            CASE 
+                WHEN Edad BETWEEN 18 AND 25 THEN '18-25' 
+                WHEN Edad BETWEEN 26 AND 35 THEN'26-35' 
+                WHEN Edad BETWEEN 36 AND 45 THEN '36-45' 
+                WHEN Edad BETWEEN 46 AND 55 THEN '46-55' 
+                WHEN Edad BETWEEN 56 AND 65 THEN '56-65' 
+                WHEN Edad > 65 THEN '66+' 
+                ELSE 'Desconocido' 
+            END AS Grupo_edad, 
+        COUNT(*) AS cantidad_usuarios FROM dim_usuarios 
+        WHERE Edad IS NOT NULL AND Tipo_usuario = 'usuario' 
+        GROUP BY Grupo_edad 
+        ORDER BY Grupo_edad;
     """)
     resultado = mycursor.fetchall()
     return jsonify(resultado)
@@ -428,15 +428,14 @@ def cantidad_usuarios_grupo_edad():
 def evolucion_altas_mes():
     mycursor = mydb.cursor(dictionary=True)
     mycursor.execute("""
-        SELECT
-            F.Ano,
+        SELECT  
+            F.Ano, 
             F.Mes,
             COUNT(DISTINCT Id_usuario) AS total_usuarios
         FROM dim_usuarios
         LEFT JOIN dim_fecha AS F ON dim_usuarios.Id_fecha_alta = F.Id_fecha
         WHERE Tipo_usuario = 'usuario'
-        GROUP BY F.Ano, F.Mes
-        ORDER BY F.Ano, F.Mes
+        GROUP BY F.Ano, F.Mes;
     """)
     resultado = mycursor.fetchall()
     return jsonify(resultado)
@@ -446,23 +445,22 @@ def evolucion_altas_mes():
 def porcentaje_pagos_qr_app():
     mycursor = mydb.cursor(dictionary=True)
     mycursor.execute("""
-        WITH total AS (
-            SELECT COUNT(DISTINCT Id_transaccion) AS total_transacciones_global
-            FROM fact_table
-            WHERE Id_tipo_operacion IN (1, 7)
-        )
-        SELECT
-            t.Operacion,
-            COUNT(DISTINCT fact_table.Id_transaccion) AS total_transacciones,
+        SELECT 
+            op.Operacion,
+            COUNT(f.Id_transaccion) AS total_operaciones,
             ROUND(
-                (COUNT(DISTINCT fact_table.Id_transaccion) * 100.0) / total.total_transacciones_global, 2
+                100.0 * COUNT(f.Id_transaccion) / SUM(COUNT(f.Id_transaccion)) OVER (),
+                2
             ) AS porcentaje
-        FROM fact_table
-        LEFT JOIN dim_operaciones AS t ON fact_table.Id_tipo_operacion = t.Id_tipo_operacion
-        JOIN total ON 1=1
-        WHERE fact_table.Id_tipo_operacion IN (1, 7)
-        GROUP BY t.Operacion, fact_table.Id_tipo_operacion, total.total_transacciones_global
-        ORDER BY porcentaje DESC;
+        FROM fact_table f
+        JOIN dim_usuarios ue ON f.Usuario_emisor = ue.Id_usuario
+        JOIN dim_usuarios ur ON f.Usuario_receptor = ur.Id_usuario
+        JOIN dim_operaciones op ON f.Id_tipo_operacion = op.Id_tipo_operacion 
+        WHERE 
+            f.Id_tipo_operacion IN (1, 7)
+            AND ue.Tipo_usuario = 'usuario'
+            AND ur.Tipo_usuario IN ('Empresa', 'autonomo')
+        GROUP BY f.Id_tipo_operacion, op.Operacion;
     """)
     resultado = mycursor.fetchall()
     return jsonify(resultado)
@@ -473,21 +471,23 @@ def transacciones_grupo_edad_operacion():
     mycursor = mydb.cursor(dictionary=True)
     mycursor.execute("""
         SELECT
-            CASE
-                WHEN U.Edad BETWEEN 18 AND 25 THEN '18-25'
-                WHEN U.Edad BETWEEN 26 AND 35 THEN '26-35'
-                WHEN U.Edad BETWEEN 36 AND 45 THEN '36-45'
-                WHEN U.Edad BETWEEN 46 AND 55 THEN '46-55'
-                WHEN U.Edad BETWEEN 56 AND 65 THEN '56-65'
-                WHEN U.Edad > 65 THEN '65+'
-                ELSE 'Desconocido'
+            CASE 
+                WHEN ue.Edad BETWEEN 18 AND 25 THEN '18-25' 
+                WHEN ue.Edad BETWEEN 26 AND 35 THEN '26-35' 
+                WHEN ue.Edad BETWEEN 36 AND 45 THEN '36-45' 
+                WHEN ue.Edad BETWEEN 46 AND 55 THEN '46-55' 
+                WHEN ue.Edad BETWEEN 56 AND 65 THEN '56-65' 
+                WHEN ue.Edad > 65 THEN '66+' 
+                ELSE 'Desconocido' 
             END AS Grupo_edad,
             F.Id_tipo_operacion,
             COUNT(DISTINCT F.Id_transaccion) AS total_transacciones
         FROM fact_table AS F
-        LEFT JOIN dim_usuarios AS U ON F.Usuario_emisor = U.Id_usuario
-        WHERE (F.Id_tipo_operacion = 1 OR F.Id_tipo_operacion = 7)
-          AND U.Tipo_usuario = 'usuario'
+        JOIN dim_usuarios AS ue ON F.Usuario_emisor = ue.Id_usuario
+        JOIN dim_usuarios ur ON F.Usuario_receptor = ur.Id_usuario
+        WHERE (F.Id_tipo_operacion = 1 OR F.Id_tipo_operacion = 7) 
+        AND ue.Tipo_usuario = 'usuario'
+        AND ur.Tipo_usuario IN ('Empresa', 'autonomo')
         GROUP BY Grupo_edad, F.Id_tipo_operacion
         ORDER BY Grupo_edad, F.Id_tipo_operacion;
     """)
@@ -499,44 +499,101 @@ def transacciones_grupo_edad_operacion():
 def ticket_medio_qr_app():
     mycursor = mydb.cursor(dictionary=True)
     mycursor.execute("""
-        SELECT
-            o.Operacion,
-            AVG(Cantidad) AS Ticket_medio
+        SELECT o.Operacion, AVG(Cantidad) AS Ticket_medio
         FROM fact_table
         LEFT JOIN dim_operaciones AS o ON fact_table.Id_tipo_operacion = o.Id_tipo_operacion
-        WHERE fact_table.Id_tipo_operacion IN (1, 7)
+        JOIN dim_usuarios ue ON fact_table.Usuario_emisor = ue.Id_usuario
+        JOIN dim_usuarios ur ON fact_table.Usuario_receptor = ur.Id_usuario
+        WHERE fact_table.Id_tipo_operacion IN (1, 7) 
+            AND ue.Tipo_usuario = 'usuario'
+            AND ur.Tipo_usuario IN ('Empresa', 'autonomo')
         GROUP BY o.Operacion;
     """)
     resultado = mycursor.fetchall()
     return jsonify(resultado)
 
-#Nuevo endpoint 6 - Transacciones por horas
+#Nuevo endpoint 6 - G4 Transacciones por horas
 @app.route('/transacciones-por-horas', methods=['GET'])
 def transacciones_por_horas():
     mycursor = mydb.cursor(dictionary=True)
     mycursor.execute("""
-        SELECT
-            HOUR(Hora_transaccion) AS Hora_Dia,
-            SUM(Cantidad) AS Promedio_Cantidad
+        SELECT HOUR(Hora_transaccion) AS Hora_Dia, ROUND(SUM(Cantidad)/ COUNT(DISTINCT Id_fecha),2) AS Promedio_Cantidad
         FROM fact_table
-        WHERE fact_table.Id_tipo_operacion IN (1, 7)
+        JOIN dim_usuarios ue ON fact_table.Usuario_emisor = ue.Id_usuario
+        JOIN dim_usuarios ur ON fact_table.Usuario_receptor = ur.Id_usuario
+        WHERE fact_table.Id_tipo_operacion IN (1, 7) 
+            AND ue.Tipo_usuario = 'usuario'
+            AND ur.Tipo_usuario IN ('Empresa', 'autonomo')
         GROUP BY HOUR(Hora_transaccion)
         ORDER BY HOUR(Hora_transaccion);
     """)
     resultado = mycursor.fetchall()
     return jsonify(resultado)
 
+#ENDPOINTS PARA SECCION TRANSACCIONES
 # Nuevo endpoint 7 - "TRANSACCIONES" La suma por para cada tipo de transacción
-@app.route('/suma_por_tipo_de_transaccion', methods=['GET'])
+@app.route('/suma-por-tipo-de-transaccion', methods=['GET'])
 def suma_por_tipo_de_transaccion():
     mycursor = mydb.cursor(dictionary=True)
 
     # La suma por para cada tipo de transacción
     mycursor.execute("""
-        SELECT o.Operacion, SUM(f.Cantidad) AS Total_Cantidad, COUNT(f.Id_transaccion) AS Total_Transacciones 
-        FROM fact_table f
-        LEFT JOIN dim_operaciones o ON o.Id_tipo_operacion = f.Id_tipo_operacion
-        GROUP BY o.Operacion;
+        SELECT o.Operacion AS tipo_operacion, SUM(Cantidad) AS cantidad_total_eur, COUNT(Id_transaccion) AS num_total_transacciones FROM fact_table
+        LEFT JOIN dim_operaciones AS o ON o.Id_tipo_operacion = fact_table.Id_tipo_operacion
+        WHERE o.Operacion != 'Transferencia interna'
+        GROUP BY tipo_operacion
+        ORDER BY cantidad_total_eur DESC;
+    """)
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
+# Nuevo endpoint 8 - G6 Total gastado vs Total devuelto en cashback
+@app.route('/gasto-total-vs-cashback-total', methods=['GET'])
+def suma_por_tipo_de_transaccion():
+    mycursor = mydb.cursor(dictionary=True)
+
+    # La suma por para cada tipo de transacción
+    mycursor.execute("""
+        SELECT 
+            CASE 
+                WHEN Id_tipo_operacion IN (1, 7) 
+                    AND Usuario_emisor IN (SELECT du.Id_usuario FROM dim_usuarios du WHERE du.Tipo_usuario = 'usuario')
+                    AND Usuario_receptor IN (SELECT du.Id_usuario FROM dim_usuarios du WHERE du.Tipo_usuario IN ('Empresa', 'autonomo'))
+                THEN 'Gasto_total'
+                WHEN Id_tipo_operacion IN (0, 4) THEN 'Cashback_total'
+            END AS Categoria,
+            SUM(Cantidad) AS Total
+        FROM fact_table
+        WHERE Id_tipo_operacion IN (0, 1, 4, 7) -- Filtro para evitar que aparezca NULL en 'Categoria'
+        GROUP BY Categoria
+        HAVING Categoria IS NOT NULL -- Filtra filas sin categoría
+        ORDER BY Total DESC;
+    """)
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
+# Nuevo endpoint 9 - G7 Distribución Mensual de Cantidad Total entre semana/findesemana
+@app.route('/total-entresemana-findesemana', methods=['GET'])
+def suma_por_tipo_de_transaccion():
+    mycursor = mydb.cursor(dictionary=True)
+
+    # La suma por para cada tipo de transacción
+    mycursor.execute("""
+        SELECT df.Mes, 
+            CASE 
+                WHEN df.DoW IN (0,1,2,3,4) THEN 'Entre semana'
+                WHEN df.DoW IN (5,6) THEN 'Fin de semana'
+            END AS dia_semana,
+            SUM(ft.Cantidad) as Cantidad_total
+        FROM fact_table ft
+        LEFT JOIN dim_fecha df ON ft.Id_fecha = df.Id_fecha
+        JOIN dim_usuarios ue ON ft.Usuario_emisor = ue.Id_usuario
+        JOIN dim_usuarios ur ON ft.Usuario_receptor = ur.Id_usuario
+        WHERE ft.Id_tipo_operacion IN (1, 7) 
+            AND ue.Tipo_usuario = 'usuario'
+            AND ur.Tipo_usuario IN ('Empresa', 'autonomo')
+        GROUP BY df.Mes, dia_semana
+        ORDER BY df.Mes;
     """)
     resultado = mycursor.fetchall()
     return jsonify(resultado)
