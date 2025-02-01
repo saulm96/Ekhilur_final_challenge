@@ -72,36 +72,36 @@ def analyze_users():
     mycursor = mydb.cursor(dictionary=True)
     
     query = """
-    WITH CategorizedUsers AS (
-        SELECT 
-            Id_usuario, 
-            Id_fecha_alta, 
-            CASE 
-                WHEN Tipo_usuario IN ('autonomo', 'Empresa') THEN 'Empresas'
-                ELSE Tipo_usuario
-            END AS Categoria_Agrupada
-        FROM dim_usuarios
-        WHERE Tipo_usuario NOT IN ('Asociacion', 'ekhilur')  -- Excluir categorías no deseadas
-    ),
-    Totals AS (
-        SELECT 
-            Categoria_Agrupada,
-            SUM(CASE WHEN Id_fecha_alta <= '20241130' THEN 1 ELSE 0 END) AS Total_Noviembre_2024,
-            SUM(CASE WHEN Id_fecha_alta <= '20241231' THEN 1 ELSE 0 END) AS Total_Diciembre_2024
-        FROM CategorizedUsers
-        GROUP BY Categoria_Agrupada
-    )
+WITH CategorizedUsers AS (
     SELECT 
-        Categoria_Agrupada AS Categoria,
-        Total_Noviembre_2024,
-        Total_Diciembre_2024,
-        (Total_Diciembre_2024 - Total_Noviembre_2024) AS Incremento_Absoluto,
+        Id_usuario, 
+        Id_fecha_alta, 
         CASE 
-            WHEN Total_Noviembre_2024 > 0 
-            THEN ROUND(((Total_Diciembre_2024 - Total_Noviembre_2024) / Total_Noviembre_2024) * 100, 1)
-            ELSE 'N/A'
-        END AS Incremento_Porcentual
-    FROM Totals;
+            WHEN Tipo_usuario IN ('autonomo', 'Empresa') THEN 'Empresas'
+            ELSE Tipo_usuario
+        END AS Categoria_Agrupada
+    FROM dim_usuarios
+    WHERE Tipo_usuario NOT IN ('Asociacion', 'ekhilur')
+),
+Totals AS (
+    SELECT 
+        Categoria_Agrupada,
+        SUM(CASE WHEN Id_fecha_alta <= '20241130' THEN 1 ELSE 0 END) AS Total_Noviembre_2024,
+        SUM(CASE WHEN Id_fecha_alta <= '20241231' THEN 1 ELSE 0 END) AS Total_Diciembre_2024
+    FROM CategorizedUsers
+    GROUP BY Categoria_Agrupada
+)
+SELECT 
+    Categoria_Agrupada AS Categoria,
+    Total_Noviembre_2024,
+    Total_Diciembre_2024,
+    (Total_Diciembre_2024 - Total_Noviembre_2024) AS Incremento_Absoluto,
+    CASE 
+        WHEN Total_Noviembre_2024 > 0 
+        THEN ROUND(((Total_Diciembre_2024 - Total_Noviembre_2024) / Total_Noviembre_2024) * 100, 1)
+        ELSE 0
+    END AS Incremento_Porcentual
+FROM Totals;
     """
     
     mycursor.execute(query)
@@ -114,43 +114,77 @@ def analyze_monthly_average_simple():
     mycursor = mydb.cursor(dictionary=True)
 
     query = """
-    WITH UsuariosFiltrados AS (
-        SELECT Id_usuario 
-        FROM dim_usuarios 
-        WHERE Tipo_usuario = 'usuario'
-    ),
-    Fechas2024 AS (
-        SELECT Id_fecha, Mes 
-        FROM dim_fecha 
-        WHERE Ano = 2024
-    ),
-    Operaciones2024 AS (
-        SELECT 
-            f.Usuario_emisor, 
-            f.Id_fecha, 
-            f.Cantidad, 
-            d.Mes
-        FROM fact_table f
-        INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
-        WHERE f.Id_tipo_operacion IN (1, 7)
-        AND f.Usuario_emisor IN (SELECT Id_usuario FROM UsuariosFiltrados)
-    ),
-    GastoMensual AS (
-        SELECT Usuario_emisor, Mes, ROUND(SUM(Cantidad), 2) AS GastoMensual
-        FROM Operaciones2024
-        GROUP BY Usuario_emisor, Mes
-    ),
-    GastoMedioPorUsuario AS (
-        SELECT Usuario_emisor, AVG(GastoMensual) AS GastoMedioMensual
-        FROM GastoMensual
-        GROUP BY Usuario_emisor
+WITH UsuariosFiltrados AS (
+    SELECT Id_usuario 
+    FROM dim_usuarios 
+    WHERE Tipo_usuario = 'usuario'
+),
+Fechas2024 AS (
+    SELECT Id_fecha, Mes 
+    FROM dim_fecha 
+    WHERE Ano = 2024
+),
+Operaciones2024 AS (
+    SELECT 
+        f.Usuario_emisor, 
+        f.Id_fecha, 
+        f.Cantidad, 
+        d.Mes,
+        o.Operacion,
+        du_origen.Tipo_usuario as tipo_origen,
+        du_destino.Tipo_usuario as tipo_destino
+    FROM fact_table f
+    INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
+    INNER JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
+    INNER JOIN dim_usuarios du_origen ON f.Usuario_emisor = du_origen.Id_usuario
+    INNER JOIN dim_usuarios du_destino ON f.Usuario_receptor = du_destino.Id_usuario
+    WHERE (
+        -- Pago normal: usuario particular a profesional
+        (o.Operacion = 'Pago a usuario' 
+         AND du_origen.Tipo_usuario = 'usuario' 
+         AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+        OR 
+        -- Pago normal entre profesionales
+        (o.Operacion = 'Pago a usuario' 
+         AND du_origen.Tipo_usuario IN ('Empresa', 'autonomo') 
+         AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+        OR
+        -- Cobro desde QR
+        (o.Operacion = 'Cobro desde QR' 
+         AND (
+             (du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+             OR 
+             (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+         ))
     )
-    SELECT ROUND(AVG(GastoMedioMensual), 2) AS `Gasto medio mensual por usuario`
-    FROM GastoMedioPorUsuario;
+    -- Excluir explícitamente recargas y bizum entre usuarios
+    AND NOT (
+        o.Operacion = 'Pago a usuario' 
+        AND (
+            (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND du_destino.Tipo_usuario = 'usuario')  -- Recarga
+            OR (du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario = 'usuario')  -- Bizum entre usuarios
+        )
+    )
+),
+GastoMensual AS (
+    SELECT 
+        Usuario_emisor, 
+        Mes, 
+        ROUND(SUM(Cantidad), 2) AS GastoMensual
+    FROM Operaciones2024
+    GROUP BY Usuario_emisor, Mes
+)
+SELECT 
+    Mes,
+    ROUND(AVG(GastoMensual), 2) AS Gasto_Medio_Mensual,
+    COUNT(DISTINCT Usuario_emisor) as Num_Usuarios
+FROM GastoMensual
+GROUP BY Mes
+ORDER BY Mes;
     """
 
     mycursor.execute(query)
-    result = mycursor.fetchone()
+    result = mycursor.fetchall()
 
     return jsonify(result)
 
@@ -159,43 +193,43 @@ def analyze_monthly_savings():
     mycursor = mydb.cursor(dictionary=True)
 
     query = """
-    WITH UsuariosFiltrados AS (
-        SELECT Id_usuario 
-        FROM dim_usuarios 
-        WHERE Tipo_usuario = 'usuario'
-    ),
-    Fechas2024 AS (
-        SELECT Id_fecha, Mes 
-        FROM dim_fecha 
-        WHERE Ano = 2024
-    ),
-    Operaciones2024 AS (
-        SELECT 
-            f.Usuario_receptor, 
-            f.Id_fecha, 
-            f.Cantidad, 
-            d.Mes
-        FROM fact_table f
-        INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
-        WHERE f.Id_tipo_operacion IN (0, 4)
-        AND f.Usuario_receptor IN (SELECT Id_usuario FROM UsuariosFiltrados)
-    ),
-    AhorroMensual AS (
-        SELECT Usuario_receptor, Mes, ROUND(SUM(Cantidad), 2) AS AhorroMensual
-        FROM Operaciones2024
-        GROUP BY Usuario_receptor, Mes
-    ),
-    AhorroMedioPorUsuario AS (
-        SELECT Usuario_receptor, AVG(AhorroMensual) AS AhorroMedioMensual
-        FROM AhorroMensual
-        GROUP BY Usuario_receptor
-    )
-    SELECT ROUND(AVG(AhorroMedioMensual), 2) AS `Ahorro medio mensual por usuario`
-    FROM AhorroMedioPorUsuario;
+WITH Fechas2024 AS (
+    SELECT Id_fecha, Mes 
+    FROM dim_fecha 
+    WHERE Ano = 2024
+),
+Bonificaciones AS (
+    SELECT 
+        f.Usuario_receptor,
+        f.Id_fecha,
+        f.Cantidad,
+        d.Mes,
+        o.Operacion
+    FROM fact_table f
+    INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
+    INNER JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
+    WHERE o.Operacion IN ('Bonificación por compra', 'Descuento automático')
+),
+AhorroMensual AS (
+    SELECT 
+        Usuario_receptor,
+        Mes,
+        ROUND(SUM(Cantidad), 2) AS AhorroMensual
+    FROM Bonificaciones
+    GROUP BY Usuario_receptor, Mes
+)
+SELECT 
+    Mes,
+    ROUND(AVG(AhorroMensual), 2) AS Ahorro_Medio_Mensual,
+    COUNT(DISTINCT Usuario_receptor) as Num_Usuarios,
+    ROUND(SUM(AhorroMensual), 2) as Total_Bonificaciones
+FROM AhorroMensual
+GROUP BY Mes
+ORDER BY Mes;
     """
 
     mycursor.execute(query)
-    result = mycursor.fetchone()
+    result = mycursor.fetchall()
 
     return jsonify(result)
 
@@ -204,17 +238,47 @@ def analyze_total_simple():
     mycursor = mydb.cursor(dictionary=True)
 
     query = """
-    WITH UltimoMes AS (
-        SELECT Id_fecha 
-        FROM dim_fecha 
-        WHERE Ano = 2024 AND Mes = 12
-    )
+WITH UltimoMes AS (
+    SELECT Id_fecha 
+    FROM dim_fecha 
+    WHERE Ano = 2024 AND Mes = 12
+),
+Operaciones AS (
     SELECT 
-        COUNT(*) AS `Número total de operaciones`, 
-        ROUND(SUM(Cantidad), 2) AS `Importe total (€)`
-    FROM fact_table
-    WHERE Id_tipo_operacion IN (1, 7)
-    AND Id_fecha IN (SELECT Id_fecha FROM UltimoMes);
+        f.Id_transaccion,
+        f.Cantidad,
+        o.Operacion,
+        du_origen.Tipo_usuario as tipo_origen,
+        du_destino.Tipo_usuario as tipo_destino
+    FROM fact_table f
+    INNER JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
+    INNER JOIN dim_usuarios du_origen ON f.Usuario_emisor = du_origen.Id_usuario
+    INNER JOIN dim_usuarios du_destino ON f.Usuario_receptor = du_destino.Id_usuario
+    WHERE f.Id_fecha IN (SELECT Id_fecha FROM UltimoMes)
+    AND (
+        -- Caso 1: Pago normal (usuario a profesional)
+        (o.Operacion = 'Pago a usuario' 
+         AND du_origen.Tipo_usuario = 'usuario' 
+         AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+        OR
+        -- Caso 2: Pago entre profesionales
+        (o.Operacion = 'Pago a usuario' 
+         AND du_origen.Tipo_usuario IN ('Empresa', 'autonomo') 
+         AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+        OR
+        -- Caso 3: Cobro desde QR (puede ser usuario a profesional o entre profesionales)
+        (o.Operacion = 'Cobro desde QR' 
+         AND (
+             (du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+             OR 
+             (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+         ))
+    )
+)
+SELECT 
+    COUNT(DISTINCT Id_transaccion) AS `Número total de operaciones`, 
+    ROUND(SUM(Cantidad), 2) AS `Importe total (€)`
+FROM Operaciones;
     """
 
     mycursor.execute(query)
@@ -228,47 +292,56 @@ def analyze_cash_flow():
 
     # Consulta para obtener el flujo de caja mensual
     query = """
-    WITH Fechas2024 AS (
-        SELECT Id_fecha, Mes 
-        FROM dim_fecha 
-        WHERE Ano = 2024
-    ),
-    Operaciones2024 AS (
-        SELECT 
-            f.Id_fecha, 
-            f.Id_tipo_operacion, 
-            f.Cantidad, 
-            d.Mes
-        FROM fact_table f
-        INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
-        WHERE f.Id_tipo_operacion IN (2, 6, 12)
-    ),
-    Entradas AS (
-        SELECT Mes, ROUND(SUM(Cantidad), 2) AS Entradas
-        FROM Operaciones2024
-        WHERE Id_tipo_operacion = 6
-        GROUP BY Mes
-    ),
-    Salidas AS (
-        SELECT Mes, ROUND(SUM(Cantidad), 2) AS Salidas
-        FROM Operaciones2024
-        WHERE Id_tipo_operacion IN (2, 12)
-        GROUP BY Mes
+WITH Fechas2024 AS (
+    SELECT Id_fecha, Mes 
+    FROM dim_fecha 
+    WHERE Ano = 2024
+),
+Operaciones2024 AS (
+    SELECT 
+        f.Id_fecha, 
+        f.Cantidad, 
+        d.Mes,
+        o.Operacion
+    FROM fact_table f
+    INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
+    INNER JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
+    WHERE o.Operacion IN (
+        'Recarga por tarjeta',
+        'Bonificación por compra',
+        'Conversión a €',
+        'Cuota mensual de socio',
+        'Cuota variable'
     )
-    SELECT 
-        CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
-        COALESCE(e.Entradas, 0) AS `Entradas (€)`,
-        COALESCE(s.Salidas, 0) AS `Salidas (€)`
-    FROM Entradas e
-    LEFT JOIN Salidas s ON e.Mes = s.Mes
-    UNION DISTINCT
-    SELECT 
-        CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
-        COALESCE(e.Entradas, 0) AS `Entradas (€)`,
-        COALESCE(s.Salidas, 0) AS `Salidas (€)`
-    FROM Salidas s
-    LEFT JOIN Entradas e ON s.Mes = e.Mes
-    ORDER BY Mes;
+),
+Entradas AS (
+    SELECT Mes, ROUND(SUM(Cantidad), 2) AS Entradas
+    FROM Operaciones2024
+    WHERE Operacion IN ('Recarga por tarjeta', 'Bonificación por compra')
+    GROUP BY Mes
+),
+Salidas AS (
+    SELECT Mes, ROUND(SUM(Cantidad), 2) AS Salidas
+    FROM Operaciones2024
+    WHERE Operacion IN ('Conversión a €', 'Cuota mensual de socio', 'Cuota variable')
+    GROUP BY Mes
+)
+SELECT 
+    CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
+    COALESCE(e.Entradas, 0) AS Entradas,
+    COALESCE(s.Salidas, 0) AS Salidas,
+    COALESCE(e.Entradas, 0) - COALESCE(s.Salidas, 0) AS Balance
+FROM Entradas e
+LEFT JOIN Salidas s ON e.Mes = s.Mes
+UNION
+SELECT 
+    CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
+    COALESCE(e.Entradas, 0) AS Entradas,
+    COALESCE(s.Salidas, 0) AS Salidas,
+    COALESCE(e.Entradas, 0) - COALESCE(s.Salidas, 0) AS Balance
+FROM Salidas s
+LEFT JOIN Entradas e ON s.Mes = e.Mes
+ORDER BY Mes;
     """
 
     mycursor.execute(query)
@@ -284,20 +357,28 @@ def analyze_cash_flow():
     Operaciones2024 AS (
         SELECT 
             f.Id_tipo_operacion, 
-            f.Cantidad
+            f.Cantidad,
+            o.Operacion
         FROM fact_table f
         INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
-        WHERE f.Id_tipo_operacion IN (2, 6, 12)
+        INNER JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
+        WHERE o.Operacion IN (
+            'Recarga por tarjeta',
+            'Bonificación por compra',
+            'Conversión a €',
+            'Cuota mensual de socio',
+            'Cuota variable'
+        )
     ),
     TotalEntradas AS (
         SELECT ROUND(SUM(Cantidad), 2) AS Total_Entradas
         FROM Operaciones2024
-        WHERE Id_tipo_operacion = 6
+        WHERE Operacion IN ('Recarga por tarjeta', 'Bonificación por compra')
     ),
     TotalSalidas AS (
         SELECT ROUND(SUM(Cantidad), 2) AS Total_Salidas
         FROM Operaciones2024
-        WHERE Id_tipo_operacion IN (2, 12)
+        WHERE Operacion IN ('Conversión a €', 'Cuota mensual de socio', 'Cuota variable')
     )
     SELECT 
         Total_Entradas AS `Total Entradas (€)`,
@@ -545,48 +626,75 @@ def revert_model_version(version):
             "detalles": {}
         }), 500
     
-@app.route('/usuarios-unicos-mensuales', methods=['GET'])
+@app.route('/usuarios-unicos-mensuales-semana-dia', methods=['GET'])
 def usuarios_unicos_mensuales():
     query_datos_completo = """
-    WITH actividad_mensual AS (
+    WITH usuarios_diarios AS (
         SELECT 
-            SUBSTRING(f.Id_fecha, 1, 6) as año_mes,
-            du_origen.Tipo_usuario as tipo_usuario_origen,
-            du_destino.Tipo_usuario as tipo_usuario_destino,
-            CASE 
-                WHEN o.Operacion = 'Cobro desde QR' THEN 'Cobro QR'
-                WHEN o.Operacion = 'Pago a usuario' AND 
-                     ((du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo')) OR
-                      (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo')))
-                    THEN 'Pago normal'
-                WHEN o.Operacion = 'Pago a usuario' AND 
-                     du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND 
-                     du_destino.Tipo_usuario = 'usuario'
-                    THEN 'Recarga'
-            END as tipo_operacion,
-            COUNT(DISTINCT f.Usuario_emisor) as usuarios_unicos_mes,
-            COUNT(*) as num_transacciones_mes,
-            ROUND(SUM(f.Cantidad), 2) as volumen_euros
+            f.Id_fecha,
+            COUNT(DISTINCT 
+                CASE WHEN 
+                    (o.Operacion IN ('Pago a usuario', 'Cobro desde QR') AND 
+                     (
+                       (du_origen.Tipo_usuario = 'usuario' AND 
+                        du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+                       OR
+                       (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND 
+                        du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+                     ))
+                    THEN f.Usuario_emisor
+                END
+            ) as usuarios_unicos_dia
         FROM fact_table f
         JOIN dim_usuarios du_origen ON f.Usuario_emisor = du_origen.Id_usuario
         JOIN dim_usuarios du_destino ON f.Usuario_receptor = du_destino.Id_usuario
         JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
         WHERE SUBSTRING(f.Id_fecha, 1, 4) = '2024'
-        AND (
-            o.Operacion = 'Cobro desde QR'
-            OR
-            (o.Operacion = 'Pago a usuario' AND 
-             NOT (du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario = 'usuario'))
-        )
-        GROUP BY 
-            SUBSTRING(f.Id_fecha, 1, 6),
-            du_origen.Tipo_usuario,
-            du_destino.Tipo_usuario,
-            tipo_operacion
+        GROUP BY f.Id_fecha
+    ),
+    usuarios_semanales AS (
+        SELECT 
+            DAYOFWEEK(STR_TO_DATE(Id_fecha, '%Y%m%d')) as dia_semana,
+            AVG(usuarios_unicos_dia) as promedio_usuarios_dia
+        FROM usuarios_diarios
+        GROUP BY DAYOFWEEK(STR_TO_DATE(Id_fecha, '%Y%m%d'))
+    ),
+    usuarios_mensuales AS (
+        SELECT 
+            SUBSTRING(f.Id_fecha, 1, 6) as año_mes,
+            SUBSTRING(f.Id_fecha, 5, 2) as mes,
+            COUNT(DISTINCT 
+                CASE WHEN 
+                    (o.Operacion IN ('Pago a usuario', 'Cobro desde QR') AND 
+                     (
+                       (du_origen.Tipo_usuario = 'usuario' AND 
+                        du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+                       OR
+                       (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND 
+                        du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
+                     ))
+                    THEN f.Usuario_emisor
+                END
+            ) as usuarios_unicos_mes
+        FROM fact_table f
+        JOIN dim_usuarios du_origen ON f.Usuario_emisor = du_origen.Id_usuario
+        JOIN dim_usuarios du_destino ON f.Usuario_receptor = du_destino.Id_usuario
+        JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
+        WHERE SUBSTRING(f.Id_fecha, 1, 4) = '2024'
+        GROUP BY SUBSTRING(f.Id_fecha, 1, 6), SUBSTRING(f.Id_fecha, 5, 2)
     )
     SELECT 
-        a.año_mes,
-        CASE SUBSTRING(a.año_mes, 5, 2)
+        ud.Id_fecha,
+        CASE DAYOFWEEK(STR_TO_DATE(ud.Id_fecha, '%Y%m%d'))
+            WHEN 1 THEN 'Domingo'
+            WHEN 2 THEN 'Lunes'
+            WHEN 3 THEN 'Martes'
+            WHEN 4 THEN 'Miércoles'
+            WHEN 5 THEN 'Jueves'
+            WHEN 6 THEN 'Viernes'
+            WHEN 7 THEN 'Sábado'
+        END as dia_semana,
+        CASE SUBSTRING(ud.Id_fecha, 5, 2)
             WHEN '01' THEN 'Enero'
             WHEN '02' THEN 'Febrero'
             WHEN '03' THEN 'Marzo'
@@ -600,85 +708,47 @@ def usuarios_unicos_mensuales():
             WHEN '11' THEN 'Noviembre'
             WHEN '12' THEN 'Diciembre'
         END as mes,
-        a.tipo_usuario_origen,
-        a.tipo_operacion,
-        a.usuarios_unicos_mes,
-        a.num_transacciones_mes,
-        a.volumen_euros
-    FROM actividad_mensual a
-    WHERE a.tipo_operacion IS NOT NULL
-    ORDER BY a.año_mes, a.tipo_usuario_origen, a.tipo_operacion;
+        ud.usuarios_unicos_dia,
+        us.promedio_usuarios_dia,
+        um.usuarios_unicos_mes
+    FROM usuarios_diarios ud
+    JOIN usuarios_semanales us ON DAYOFWEEK(STR_TO_DATE(ud.Id_fecha, '%Y%m%d')) = us.dia_semana
+    JOIN usuarios_mensuales um ON SUBSTRING(ud.Id_fecha, 5, 2) = um.mes
+    ORDER BY ud.Id_fecha;
     """
     
+    # Ejecutar la consulta
     df = pd.read_sql(query_datos_completo, mydb)
     
-    # Crear diccionario para ordenar los meses
-    orden_meses = {
-        'Enero': '01', 'Febrero': '02', 'Marzo': '03', 'Abril': '04',
-        'Mayo': '05', 'Junio': '06', 'Julio': '07', 'Agosto': '08',
-        'Septiembre': '09', 'Octubre': '10', 'Noviembre': '11', 'Diciembre': '12'
+    # Convertir Id_fecha a datetime
+    df['fecha'] = pd.to_datetime(df['Id_fecha'], format='%Y%m%d')
+    
+    # Calcular medias móviles
+    df['media_movil_14d'] = df['usuarios_unicos_dia'].rolling(window=14, center=True).mean()
+    df['media_movil_28d'] = df['usuarios_unicos_dia'].rolling(window=28, center=True).mean()
+    
+    # Preparar datos para promedios semanales y mensuales
+    orden_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    promedios_semanales = df.groupby('dia_semana')['promedio_usuarios_dia'].first().reindex(orden_dias)
+    
+    orden_meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+    usuarios_mensuales = df.groupby('mes')['usuarios_unicos_mes'].first().reindex(orden_meses)
+    
+    # Crear el diccionario de resultados
+    resultados = {
+        "estadisticas_diarias": {
+            "media_usuarios_dia": float(df['usuarios_unicos_dia'].mean()),
+            "mediana_usuarios_dia": float(df['usuarios_unicos_dia'].median()),
+            "maximo_usuarios_dia": float(df['usuarios_unicos_dia'].max()),
+            "minimo_usuarios_dia": float(df['usuarios_unicos_dia'].min())
+        },
+        "datos_diarios": df[['Id_fecha', 'usuarios_unicos_dia', 'media_movil_14d', 'media_movil_28d']].to_dict('records'),
+        "promedios_semanales": promedios_semanales.to_dict(),
+        "usuarios_mensuales": usuarios_mensuales.to_dict()
     }
     
-    # Preparar el resultado
-    resultado = {
-        "datos_mensuales": {},
-        "resumen_estadistico": {}
-    }
-    
-    # Procesar datos mensuales
-    for tipo_usuario in ['usuario', 'Empresa', 'autonomo']:
-        datos_tipo = df[df['tipo_usuario_origen'] == tipo_usuario]
-        datos_agrupados = datos_tipo.groupby(['mes', 'tipo_operacion']).agg({
-            'usuarios_unicos_mes': 'max',
-            'num_transacciones_mes': 'sum',
-            'volumen_euros': 'sum'
-        }).reset_index()
-        
-        resultado["datos_mensuales"][tipo_usuario] = {}
-        
-        # Ordenar los meses cronológicamente
-        for mes in sorted(datos_agrupados['mes'].unique(), key=lambda x: orden_meses[x]):
-            datos_mes = datos_agrupados[datos_agrupados['mes'] == mes]
-            resultado["datos_mensuales"][tipo_usuario][mes] = {}
-            
-            for _, row in datos_mes.iterrows():
-                resultado["datos_mensuales"][tipo_usuario][mes][row['tipo_operacion']] = {
-                    "usuarios_unicos": int(row['usuarios_unicos_mes']),
-                    "num_transacciones": int(row['num_transacciones_mes']),
-                    "volumen_euros": float(row['volumen_euros'])
-                }
-    
-    # Procesar resumen estadístico
-    for tipo_usuario in ['usuario', 'Empresa', 'autonomo']:
-        datos_tipo = df[df['tipo_usuario_origen'] == tipo_usuario]
-        datos_agrupados = datos_tipo.groupby(['mes', 'tipo_operacion']).agg({
-            'usuarios_unicos_mes': 'max',
-            'num_transacciones_mes': 'sum',
-            'volumen_euros': 'sum'
-        }).reset_index()
-        
-        resultado["resumen_estadistico"][tipo_usuario] = {}
-        
-        for operacion in datos_agrupados['tipo_operacion'].unique():
-            datos_op = datos_agrupados[datos_agrupados['tipo_operacion'] == operacion]
-            max_mes = datos_op.loc[datos_op['usuarios_unicos_mes'].idxmax()]
-            min_mes = datos_op.loc[datos_op['usuarios_unicos_mes'].idxmin()]
-            
-            resultado["resumen_estadistico"][tipo_usuario][operacion] = {
-                "promedio_mensual_usuarios": float(datos_op['usuarios_unicos_mes'].mean()),
-                "maximo": {
-                    "usuarios": int(max_mes['usuarios_unicos_mes']),
-                    "mes": max_mes['mes']
-                },
-                "minimo": {
-                    "usuarios": int(min_mes['usuarios_unicos_mes']),
-                    "mes": min_mes['mes']
-                },
-                "volumen_total_euros": float(datos_op['volumen_euros'].sum()),
-                "total_transacciones": int(datos_op['num_transacciones_mes'].sum())
-            }
-    
-    return jsonify(resultado)
+    return jsonify(resultados)
 
 # Ejecutar la aplicación
 if __name__ == '__main__':
