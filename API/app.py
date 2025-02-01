@@ -601,6 +601,141 @@ def revert_model_version(version):
             "mensaje": f"Error al revertir el modelo: {str(e)}",
             "detalles": {}
         }), 500
+    
+@app.route('/usuarios-unicos-mensuales', methods=['GET'])
+def usuarios_unicos_mensuales():
+    query_datos_completo = """
+    WITH actividad_mensual AS (
+        SELECT 
+            SUBSTRING(f.Id_fecha, 1, 6) as año_mes,
+            du_origen.Tipo_usuario as tipo_usuario_origen,
+            du_destino.Tipo_usuario as tipo_usuario_destino,
+            CASE 
+                WHEN o.Operacion = 'Cobro desde QR' THEN 'Cobro QR'
+                WHEN o.Operacion = 'Pago a usuario' AND 
+                     ((du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo')) OR
+                      (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo')))
+                    THEN 'Pago normal'
+                WHEN o.Operacion = 'Pago a usuario' AND 
+                     du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND 
+                     du_destino.Tipo_usuario = 'usuario'
+                    THEN 'Recarga'
+            END as tipo_operacion,
+            COUNT(DISTINCT f.Usuario_emisor) as usuarios_unicos_mes,
+            COUNT(*) as num_transacciones_mes,
+            ROUND(SUM(f.Cantidad), 2) as volumen_euros
+        FROM fact_table f
+        JOIN dim_usuarios du_origen ON f.Usuario_emisor = du_origen.Id_usuario
+        JOIN dim_usuarios du_destino ON f.Usuario_receptor = du_destino.Id_usuario
+        JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
+        WHERE SUBSTRING(f.Id_fecha, 1, 4) = '2024'
+        AND (
+            o.Operacion = 'Cobro desde QR'
+            OR
+            (o.Operacion = 'Pago a usuario' AND 
+             NOT (du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario = 'usuario'))
+        )
+        GROUP BY 
+            SUBSTRING(f.Id_fecha, 1, 6),
+            du_origen.Tipo_usuario,
+            du_destino.Tipo_usuario,
+            tipo_operacion
+    )
+    SELECT 
+        a.año_mes,
+        CASE SUBSTRING(a.año_mes, 5, 2)
+            WHEN '01' THEN 'Enero'
+            WHEN '02' THEN 'Febrero'
+            WHEN '03' THEN 'Marzo'
+            WHEN '04' THEN 'Abril'
+            WHEN '05' THEN 'Mayo'
+            WHEN '06' THEN 'Junio'
+            WHEN '07' THEN 'Julio'
+            WHEN '08' THEN 'Agosto'
+            WHEN '09' THEN 'Septiembre'
+            WHEN '10' THEN 'Octubre'
+            WHEN '11' THEN 'Noviembre'
+            WHEN '12' THEN 'Diciembre'
+        END as mes,
+        a.tipo_usuario_origen,
+        a.tipo_operacion,
+        a.usuarios_unicos_mes,
+        a.num_transacciones_mes,
+        a.volumen_euros
+    FROM actividad_mensual a
+    WHERE a.tipo_operacion IS NOT NULL
+    ORDER BY a.año_mes, a.tipo_usuario_origen, a.tipo_operacion;
+    """
+    
+    df = pd.read_sql(query_datos_completo, mydb)
+    
+    # Crear diccionario para ordenar los meses
+    orden_meses = {
+        'Enero': '01', 'Febrero': '02', 'Marzo': '03', 'Abril': '04',
+        'Mayo': '05', 'Junio': '06', 'Julio': '07', 'Agosto': '08',
+        'Septiembre': '09', 'Octubre': '10', 'Noviembre': '11', 'Diciembre': '12'
+    }
+    
+    # Preparar el resultado
+    resultado = {
+        "datos_mensuales": {},
+        "resumen_estadistico": {}
+    }
+    
+    # Procesar datos mensuales
+    for tipo_usuario in ['usuario', 'Empresa', 'autonomo']:
+        datos_tipo = df[df['tipo_usuario_origen'] == tipo_usuario]
+        datos_agrupados = datos_tipo.groupby(['mes', 'tipo_operacion']).agg({
+            'usuarios_unicos_mes': 'max',
+            'num_transacciones_mes': 'sum',
+            'volumen_euros': 'sum'
+        }).reset_index()
+        
+        resultado["datos_mensuales"][tipo_usuario] = {}
+        
+        # Ordenar los meses cronológicamente
+        for mes in sorted(datos_agrupados['mes'].unique(), key=lambda x: orden_meses[x]):
+            datos_mes = datos_agrupados[datos_agrupados['mes'] == mes]
+            resultado["datos_mensuales"][tipo_usuario][mes] = {}
+            
+            for _, row in datos_mes.iterrows():
+                resultado["datos_mensuales"][tipo_usuario][mes][row['tipo_operacion']] = {
+                    "usuarios_unicos": int(row['usuarios_unicos_mes']),
+                    "num_transacciones": int(row['num_transacciones_mes']),
+                    "volumen_euros": float(row['volumen_euros'])
+                }
+    
+    # Procesar resumen estadístico
+    for tipo_usuario in ['usuario', 'Empresa', 'autonomo']:
+        datos_tipo = df[df['tipo_usuario_origen'] == tipo_usuario]
+        datos_agrupados = datos_tipo.groupby(['mes', 'tipo_operacion']).agg({
+            'usuarios_unicos_mes': 'max',
+            'num_transacciones_mes': 'sum',
+            'volumen_euros': 'sum'
+        }).reset_index()
+        
+        resultado["resumen_estadistico"][tipo_usuario] = {}
+        
+        for operacion in datos_agrupados['tipo_operacion'].unique():
+            datos_op = datos_agrupados[datos_agrupados['tipo_operacion'] == operacion]
+            max_mes = datos_op.loc[datos_op['usuarios_unicos_mes'].idxmax()]
+            min_mes = datos_op.loc[datos_op['usuarios_unicos_mes'].idxmin()]
+            
+            resultado["resumen_estadistico"][tipo_usuario][operacion] = {
+                "promedio_mensual_usuarios": float(datos_op['usuarios_unicos_mes'].mean()),
+                "maximo": {
+                    "usuarios": int(max_mes['usuarios_unicos_mes']),
+                    "mes": max_mes['mes']
+                },
+                "minimo": {
+                    "usuarios": int(min_mes['usuarios_unicos_mes']),
+                    "mes": min_mes['mes']
+                },
+                "volumen_total_euros": float(datos_op['volumen_euros'].sum()),
+                "total_transacciones": int(datos_op['num_transacciones_mes'].sum())
+            }
+    
+    return jsonify(resultado)
 
 # Ejecutar la aplicación
 if __name__ == '__main__':
