@@ -530,15 +530,15 @@ def transacciones_por_horas():
     resultado = mycursor.fetchall()
     return jsonify(resultado)
 
-#ENDPOINTS PARA SECCION TRANSACCIONES
 # Nuevo endpoint 7 - "TRANSACCIONES" La suma por para cada tipo de transacción
 @app.route('/suma-por-tipo-de-transaccion', methods=['GET'])
-def suma_por_tipo_de_transaccion():
+def suma_por_tipo_operacion():
     mycursor = mydb.cursor(dictionary=True)
 
     # La suma por para cada tipo de transacción
     mycursor.execute("""
-        SELECT o.Operacion AS tipo_operacion, SUM(Cantidad) AS cantidad_total_eur, COUNT(Id_transaccion) AS num_total_transacciones FROM fact_table
+        SELECT o.Operacion AS tipo_operacion, SUM(Cantidad) AS cantidad_total_eur, COUNT(Id_transaccion) AS num_total_transacciones 
+        FROM fact_table
         LEFT JOIN dim_operaciones AS o ON o.Id_tipo_operacion = fact_table.Id_tipo_operacion
         WHERE o.Operacion != 'Transferencia interna'
         GROUP BY tipo_operacion
@@ -549,10 +549,9 @@ def suma_por_tipo_de_transaccion():
 
 # Nuevo endpoint 8 - G6 Total gastado vs Total devuelto en cashback
 @app.route('/gasto-total-vs-cashback-total', methods=['GET'])
-def suma_por_tipo_de_transaccion():
+def gasto_vs_cashback():
     mycursor = mydb.cursor(dictionary=True)
 
-    # La suma por para cada tipo de transacción
     mycursor.execute("""
         SELECT 
             CASE 
@@ -564,9 +563,9 @@ def suma_por_tipo_de_transaccion():
             END AS Categoria,
             SUM(Cantidad) AS Total
         FROM fact_table
-        WHERE Id_tipo_operacion IN (0, 1, 4, 7) -- Filtro para evitar que aparezca NULL en 'Categoria'
+        WHERE Id_tipo_operacion IN (0, 1, 4, 7)
         GROUP BY Categoria
-        HAVING Categoria IS NOT NULL -- Filtra filas sin categoría
+        HAVING Categoria IS NOT NULL
         ORDER BY Total DESC;
     """)
     resultado = mycursor.fetchall()
@@ -574,10 +573,9 @@ def suma_por_tipo_de_transaccion():
 
 # Nuevo endpoint 9 - G7 Distribución Mensual de Cantidad Total entre semana/findesemana
 @app.route('/total-entresemana-findesemana', methods=['GET'])
-def suma_por_tipo_de_transaccion():
+def distribucion_semanal_mensual():
     mycursor = mydb.cursor(dictionary=True)
 
-    # La suma por para cada tipo de transacción
     mycursor.execute("""
         SELECT df.Mes, 
             CASE 
@@ -806,6 +804,80 @@ def usuarios_unicos_mensuales():
     }
     
     return jsonify(resultados)
+
+@app.route('/medias-moviles', methods=['GET'])
+def medias_moviles():
+    mycursor = mydb.cursor(dictionary=True)
+    mycursor.execute("""
+        WITH merged AS (
+          SELECT
+            f.Id_fecha,
+            f.Id_tipo_operacion,
+            f.Cantidad,
+            f.Usuario_emisor,
+            f.Usuario_receptor,
+            -- Convertimos Id_fecha al tipo DATE asumiendo el formato 'YYYYMMDD'
+            STR_TO_DATE(f.Id_fecha, '%Y%m%d') AS fecha,
+            du_em.Tipo_usuario AS Tipo_emisor,
+            du_rec.Tipo_usuario AS Tipo_receptor
+          FROM fact_table f
+          LEFT JOIN dim_operaciones d
+            ON f.Id_tipo_operacion = d.Id_tipo_operacion
+          LEFT JOIN dim_usuarios du_em
+            ON f.Usuario_emisor = du_em.Id_usuario
+          LEFT JOIN dim_usuarios du_rec
+            ON f.Usuario_receptor = du_rec.Id_usuario
+        ),
+        compras AS (
+          SELECT
+            *,
+            CASE
+              WHEN Id_tipo_operacion = 7 THEN 1
+              WHEN Id_tipo_operacion = 1
+                   AND Tipo_emisor IN ('usuario', 'autonomo', 'Empresa')
+                   AND Tipo_receptor IN ('autonomo', 'Empresa') THEN 1
+              ELSE 0
+            END AS es_compra
+          FROM merged
+        ),
+        compras_filtradas AS (
+          SELECT *
+          FROM compras
+          WHERE es_compra = 1
+        ),
+        suma_diaria AS (
+          SELECT
+            fecha,
+            SUM(Cantidad) AS suma_dia
+          FROM compras_filtradas
+          GROUP BY fecha
+        ),
+        rolling_sum AS (
+          SELECT
+            fecha,
+            suma_dia,
+            CASE
+              WHEN COUNT(suma_dia) OVER (
+                     ORDER BY fecha
+                     ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+                   ) < 14 THEN NULL
+              ELSE SUM(suma_dia) OVER (
+                     ORDER BY fecha
+                     ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+                   )
+            END AS sum_compras_acumulado
+          FROM suma_diaria
+        )
+        SELECT
+          fecha AS Id_fecha,
+          suma_dia AS Cantidad,
+          sum_compras_acumulado,
+          LAG(sum_compras_acumulado, 14) OVER (ORDER BY fecha) AS shift_14
+        FROM rolling_sum
+        ORDER BY fecha;
+    """)
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
 
 # Ejecutar la aplicación
 if __name__ == '__main__':
