@@ -7,12 +7,16 @@ import { getAllBlacklistedTokens } from "../../controllers/adminInfoController/a
 
 import userRoute from "./userApiRoutes.js";
 import clientRouter from "./clientApiRouter.js";
+import landingPageApiRouter from "./landingPageApiRouter.js";
+import transactionApiRouter from "./transactionApiRouter.js";
 
 const router = Router();
 
 
 router.use("/user",userRoute);
 router.use("/client", clientRouter)
+router.use("/landing-page", landingPageApiRouter)
+router.use("/transaction", transactionApiRouter)
 router.get("/blacklist", getAllBlacklistedTokens);
 
 router.post("/login", authApiController.login);

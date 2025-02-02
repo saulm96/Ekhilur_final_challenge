@@ -8,7 +8,6 @@ import speakeasy from "speakeasy";
 async function login(req, res) {
     try {
         const { email, password } = req.body;
-        console.log('Login attempt for:', email);
 
         if (!email || !password) {
             throw new error.MISSING_CREDENTIALS();
@@ -28,7 +27,6 @@ async function login(req, res) {
 
         // Si el usuario no tiene secreto, generamos uno nuevo
         if (!user.two_factor_secret || user.two_factor_secret === "") {
-            console.log('Generating new secret for user');
             const secret = speakeasy.generateSecret({
                 name: `MyApp: ${user.email}`,
                 length: 10,
@@ -38,7 +36,6 @@ async function login(req, res) {
                 two_factor_secret: secret.base32
             });
 
-            console.log('New secret generated:', secret.base32);
 
             return res.json({
                 success: true,
@@ -47,7 +44,6 @@ async function login(req, res) {
             });
         }
 
-        console.log('User already has secret, proceeding to verification');
         // Si ya tiene secreto, solo devolvemos éxito
         return res.json({
             success: true,
@@ -114,8 +110,6 @@ async function verify2FA(req, res) {
 async function logout(req, res) {
     try {
         const token = req.cookies?.authToken;
-        console.log('cookie recibed: ', req.cookies);
-        console.log('token recibed: ', token);
         if (!token) {
             return res.status(401).json({ message: "Unauthorized" });
         }
