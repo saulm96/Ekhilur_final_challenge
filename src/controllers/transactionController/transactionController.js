@@ -45,7 +45,7 @@ const getTransictionPageData = async () => {
         
         const mobileAverage = await fetchWithRetry(`${DATA_API_URL}/medias-moviles`);
 
-        const transaccionesEntreSemanaYFinDeSemana = await fetchWithRetry(`${DATA_API_URL}/transacciones-entre-semana-y-fin-de-semana`);
+        const transaccionesEntreSemanaYFinDeSemana = await fetchWithRetry(`${DATA_API_URL}/total-entresemana-findesemana`);  
 
         const transaccionesPorHora = await fetchWithRetry(`${DATA_API_URL}/transacciones-por-horas`);
         
