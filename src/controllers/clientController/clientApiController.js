@@ -3,9 +3,7 @@ import clientController from './clientController.js';
 
 async function getAllClients(req, res) {
     try {
-        console.log('API Controller: Getting all clients');
         const clients = await clientController.getAllClients();
-        console.log('API Controller: Got clients:', clients);
         res.status(200).json(clients);
     } catch (error) {
         console.error('API Controller Error:', error);
@@ -15,8 +13,22 @@ async function getAllClients(req, res) {
     }
 }
 
+
+async function getClientPageData(req, res) {
+    try {
+        const clientData = await clientController.getClientPageData();
+        res.status(200).json(clientData);
+    } catch (error) {
+        console.error('API Controller Error:', error);
+        res.status(error.status || 500).json({ 
+            error: error.message || 'Error al obtener los datos de la landing page'
+        });
+    }
+}
+
 export const clientApiController = {
-    getAllClients
+    getAllClients,
+    getClientPageData
 };
 
 export default clientApiController;
