@@ -43,17 +43,6 @@ CORS(app, resources={
 
 
 
-@app.route('/')
-def home():
-    return jsonify({'message': 'Hola FullStack!'})
-
-@app.route('/usuarios', methods=['GET'])
-def obtener_usuarios():
-    mycursor = mydb.cursor(dictionary=True)
-    mycursor.execute("SELECT * FROM dim_usuarios")
-    usuarios = mycursor.fetchall()
-    return jsonify(usuarios)
-
 # Nuevos 5 endpoint para landingpage "ekhilur"
 @app.route('/analyze_users', methods=['GET'])
 def analyze_users():
@@ -94,7 +83,7 @@ FROM Totals;
     
     mycursor.execute(query)
     results = mycursor.fetchall()
-    
+    print(type)
     return jsonify(results)
 
 @app.route('/analyze_monthly_average_simple', methods=['GET'])
@@ -102,12 +91,7 @@ def analyze_monthly_average_simple():
     mycursor = mydb.cursor(dictionary=True)
 
     query = """
-WITH UsuariosFiltrados AS (
-    SELECT Id_usuario 
-    FROM dim_usuarios 
-    WHERE Tipo_usuario = 'usuario'
-),
-Fechas2024 AS (
+WITH Fechas2024 AS (
     SELECT Id_fecha, Mes 
     FROM dim_fecha 
     WHERE Ano = 2024
@@ -115,44 +99,25 @@ Fechas2024 AS (
 Operaciones2024 AS (
     SELECT 
         f.Usuario_emisor, 
-        f.Id_fecha, 
-        f.Cantidad, 
         d.Mes,
-        o.Operacion,
-        du_origen.Tipo_usuario as tipo_origen,
-        du_destino.Tipo_usuario as tipo_destino
+        f.Cantidad
     FROM fact_table f
     INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
     INNER JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
     INNER JOIN dim_usuarios du_origen ON f.Usuario_emisor = du_origen.Id_usuario
     INNER JOIN dim_usuarios du_destino ON f.Usuario_receptor = du_destino.Id_usuario
-    WHERE (
-        -- Pago normal: usuario particular a profesional
-        (o.Operacion = 'Pago a usuario' 
-         AND du_origen.Tipo_usuario = 'usuario' 
-         AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-        OR 
-        -- Pago normal entre profesionales
-        (o.Operacion = 'Pago a usuario' 
-         AND du_origen.Tipo_usuario IN ('Empresa', 'autonomo') 
-         AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-        OR
-        -- Cobro desde QR
-        (o.Operacion = 'Cobro desde QR' 
-         AND (
-             (du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-             OR 
-             (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-         ))
-    )
-    -- Excluir explícitamente recargas y bizum entre usuarios
-    AND NOT (
-        o.Operacion = 'Pago a usuario' 
-        AND (
-            (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND du_destino.Tipo_usuario = 'usuario')  -- Recarga
-            OR (du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario = 'usuario')  -- Bizum entre usuarios
-        )
-    )
+    WHERE o.Operacion IN ('Pago a usuario', 'Cobro desde QR')
+      AND (
+          (du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))  -- Pago normal: usuario a profesional
+          OR (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))  -- Pago entre profesionales
+      )
+      AND NOT (
+          o.Operacion = 'Pago a usuario' 
+          AND (
+              (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND du_destino.Tipo_usuario = 'usuario')  -- Recarga
+              OR (du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario = 'usuario')  -- Bizum entre usuarios
+          )
+      )
 ),
 GastoMensual AS (
     SELECT 
@@ -165,7 +130,7 @@ GastoMensual AS (
 SELECT 
     Mes,
     ROUND(AVG(GastoMensual), 2) AS Gasto_Medio_Mensual,
-    COUNT(DISTINCT Usuario_emisor) as Num_Usuarios
+    COUNT(DISTINCT Usuario_emisor) AS Num_Usuarios
 FROM GastoMensual
 GROUP BY Mes
 ORDER BY Mes;
@@ -189,10 +154,8 @@ WITH Fechas2024 AS (
 Bonificaciones AS (
     SELECT 
         f.Usuario_receptor,
-        f.Id_fecha,
-        f.Cantidad,
         d.Mes,
-        o.Operacion
+        f.Cantidad
     FROM fact_table f
     INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
     INNER JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
@@ -209,8 +172,8 @@ AhorroMensual AS (
 SELECT 
     Mes,
     ROUND(AVG(AhorroMensual), 2) AS Ahorro_Medio_Mensual,
-    COUNT(DISTINCT Usuario_receptor) as Num_Usuarios,
-    ROUND(SUM(AhorroMensual), 2) as Total_Bonificaciones
+    COUNT(DISTINCT Usuario_receptor) AS Num_Usuarios,
+    ROUND(SUM(AhorroMensual), 2) AS Total_Bonificaciones
 FROM AhorroMensual
 GROUP BY Mes
 ORDER BY Mes;
@@ -234,34 +197,17 @@ WITH UltimoMes AS (
 Operaciones AS (
     SELECT 
         f.Id_transaccion,
-        f.Cantidad,
-        o.Operacion,
-        du_origen.Tipo_usuario as tipo_origen,
-        du_destino.Tipo_usuario as tipo_destino
+        f.Cantidad
     FROM fact_table f
     INNER JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
     INNER JOIN dim_usuarios du_origen ON f.Usuario_emisor = du_origen.Id_usuario
     INNER JOIN dim_usuarios du_destino ON f.Usuario_receptor = du_destino.Id_usuario
     WHERE f.Id_fecha IN (SELECT Id_fecha FROM UltimoMes)
-    AND (
-        -- Caso 1: Pago normal (usuario a profesional)
-        (o.Operacion = 'Pago a usuario' 
-         AND du_origen.Tipo_usuario = 'usuario' 
-         AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-        OR
-        -- Caso 2: Pago entre profesionales
-        (o.Operacion = 'Pago a usuario' 
-         AND du_origen.Tipo_usuario IN ('Empresa', 'autonomo') 
-         AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-        OR
-        -- Caso 3: Cobro desde QR (puede ser usuario a profesional o entre profesionales)
-        (o.Operacion = 'Cobro desde QR' 
-         AND (
-             (du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-             OR 
-             (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-         ))
-    )
+      AND o.Operacion IN ('Pago a usuario', 'Cobro desde QR')
+      AND (
+          (du_origen.Tipo_usuario = 'usuario' AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))  -- Caso 1: Pago normal (usuario a profesional)
+          OR (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))  -- Caso 2: Pago entre profesionales
+      )
 )
 SELECT 
     COUNT(DISTINCT Id_transaccion) AS `Número total de operaciones`, 
@@ -273,13 +219,12 @@ FROM Operaciones;
     result = mycursor.fetchone()
 
     return jsonify(result)
-
 @app.route('/analyze_cash_flow', methods=['GET'])
 def analyze_cash_flow():
     mycursor = mydb.cursor(dictionary=True)
 
     # Consulta para obtener el flujo de caja mensual
-    query = """
+    monthly_query = """
 WITH Fechas2024 AS (
     SELECT Id_fecha, Mes 
     FROM dim_fecha 
@@ -302,78 +247,55 @@ Operaciones2024 AS (
         'Cuota variable'
     )
 ),
-Entradas AS (
-    SELECT Mes, ROUND(SUM(Cantidad), 2) AS Entradas
+EntradasSalidas AS (
+    SELECT 
+        Mes,
+        ROUND(SUM(CASE WHEN Operacion IN ('Recarga por tarjeta', 'Bonificación por compra') THEN Cantidad ELSE 0 END), 2) AS Entradas,
+        ROUND(SUM(CASE WHEN Operacion IN ('Conversión a €', 'Cuota mensual de socio', 'Cuota variable') THEN Cantidad ELSE 0 END), 2) AS Salidas
     FROM Operaciones2024
-    WHERE Operacion IN ('Recarga por tarjeta', 'Bonificación por compra')
-    GROUP BY Mes
-),
-Salidas AS (
-    SELECT Mes, ROUND(SUM(Cantidad), 2) AS Salidas
-    FROM Operaciones2024
-    WHERE Operacion IN ('Conversión a €', 'Cuota mensual de socio', 'Cuota variable')
     GROUP BY Mes
 )
 SELECT 
-    CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
-    COALESCE(e.Entradas, 0) AS Entradas,
-    COALESCE(s.Salidas, 0) AS Salidas,
-    COALESCE(e.Entradas, 0) - COALESCE(s.Salidas, 0) AS Balance
-FROM Entradas e
-LEFT JOIN Salidas s ON e.Mes = s.Mes
-UNION
-SELECT 
-    CAST(COALESCE(e.Mes, s.Mes) AS UNSIGNED) AS Mes,
-    COALESCE(e.Entradas, 0) AS Entradas,
-    COALESCE(s.Salidas, 0) AS Salidas,
-    COALESCE(e.Entradas, 0) - COALESCE(s.Salidas, 0) AS Balance
-FROM Salidas s
-LEFT JOIN Entradas e ON s.Mes = e.Mes
+    Mes,
+    Entradas,
+    Salidas,
+    (Entradas - Salidas) AS Balance
+FROM EntradasSalidas
 ORDER BY Mes;
     """
 
-    mycursor.execute(query)
-    monthly_results = mycursor.fetchall()
-
     # Consulta para obtener los totales anuales
     totals_query = """
-    WITH Fechas2024 AS (
-        SELECT Id_fecha 
-        FROM dim_fecha 
-        WHERE Ano = 2024
-    ),
-    Operaciones2024 AS (
-        SELECT 
-            f.Id_tipo_operacion, 
-            f.Cantidad,
-            o.Operacion
-        FROM fact_table f
-        INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
-        INNER JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
-        WHERE o.Operacion IN (
-            'Recarga por tarjeta',
-            'Bonificación por compra',
-            'Conversión a €',
-            'Cuota mensual de socio',
-            'Cuota variable'
-        )
-    ),
-    TotalEntradas AS (
-        SELECT ROUND(SUM(Cantidad), 2) AS Total_Entradas
-        FROM Operaciones2024
-        WHERE Operacion IN ('Recarga por tarjeta', 'Bonificación por compra')
-    ),
-    TotalSalidas AS (
-        SELECT ROUND(SUM(Cantidad), 2) AS Total_Salidas
-        FROM Operaciones2024
-        WHERE Operacion IN ('Conversión a €', 'Cuota mensual de socio', 'Cuota variable')
-    )
+WITH Fechas2024 AS (
+    SELECT Id_fecha 
+    FROM dim_fecha 
+    WHERE Ano = 2024
+),
+Operaciones2024 AS (
     SELECT 
-        Total_Entradas AS `Total Entradas (€)`,
-        Total_Salidas AS `Total Salidas (€)`,
-        (Total_Entradas - Total_Salidas) AS `Balance Neto (€)`
-    FROM TotalEntradas, TotalSalidas;
+        f.Cantidad,
+        o.Operacion
+    FROM fact_table f
+    INNER JOIN Fechas2024 d ON f.Id_fecha = d.Id_fecha
+    INNER JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
+    WHERE o.Operacion IN (
+        'Recarga por tarjeta',
+        'Bonificación por compra',
+        'Conversión a €',
+        'Cuota mensual de socio',
+        'Cuota variable'
+    )
+)
+SELECT 
+    ROUND(SUM(CASE WHEN Operacion IN ('Recarga por tarjeta', 'Bonificación por compra') THEN Cantidad ELSE 0 END), 2) AS `Total Entradas (€)`,
+    ROUND(SUM(CASE WHEN Operacion IN ('Conversión a €', 'Cuota mensual de socio', 'Cuota variable') THEN Cantidad ELSE 0 END), 2) AS `Total Salidas (€)`,
+    ROUND(SUM(CASE WHEN Operacion IN ('Recarga por tarjeta', 'Bonificación por compra') THEN Cantidad ELSE 0 END) -
+          SUM(CASE WHEN Operacion IN ('Conversión a €', 'Cuota mensual de socio', 'Cuota variable') THEN Cantidad ELSE 0 END), 2) AS `Balance Neto (€)`
+FROM Operaciones2024;
     """
+
+    mycursor.execute(monthly_query)
+    monthly_results = mycursor.fetchall()
 
     mycursor.execute(totals_query)
     totals_result = mycursor.fetchone()
@@ -384,7 +306,6 @@ ORDER BY Mes;
     }
 
     return jsonify(response)
-
 # fin Nuevos 5 endpoint para landingpage "ekhilur"
 
 #ENDPOINTS PARA SECCION USUARIOS
@@ -792,7 +713,7 @@ def usuarios_unicos_mensuales():
     }
     
     return jsonify(resultados)
-
+    
 @app.route('/medias-moviles', methods=['GET'])
 def medias_moviles():
     mycursor = mydb.cursor(dictionary=True)
