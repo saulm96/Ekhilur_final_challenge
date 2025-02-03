@@ -7,7 +7,7 @@ const DATA_API_URL = `http://${process.env.DATA_API_APP_HOST}:5000`;
 
 const getSumByTransactionsType = async () => {
     try {
-        const response = await axios.get(`${DATA_API_URL}/suma_por_tipo_de_transaccion`);
+        const response = await axios.get(`${DATA_API_URL}/suma-por-tipo-de-transaccion`);
         return response.data;
     } catch (error) {
         console.error('Error in transactionController:', error.message);
