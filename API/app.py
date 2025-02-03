@@ -446,12 +446,50 @@ def suma_por_tipo_operacion():
 
     # La suma por para cada tipo de transacción
     mycursor.execute("""
-        SELECT o.Operacion AS tipo_operacion, SUM(Cantidad) AS cantidad_total_eur, COUNT(Id_transaccion) AS num_total_transacciones 
-        FROM fact_table
-        LEFT JOIN dim_operaciones AS o ON o.Id_tipo_operacion = fact_table.Id_tipo_operacion
-        WHERE o.Operacion != 'Transferencia interna'
-        GROUP BY tipo_operacion
-        ORDER BY cantidad_total_eur DESC;
+        SELECT
+	fe.Ano AS Anho,
+	fe.Mes AS Mes,
+	CASE
+		WHEN (op.Operacion = 'Pago a usuario' OR op.Operacion = 'Cobro desde QR') AND ue.Tipo_usuario = 'usuario' AND ur.Tipo_usuario IN ('autonomo', 'Empresa')
+			THEN 'Pago en tienda'
+		WHEN op.Operacion = 'Pago a usuario' AND ue.Tipo_usuario = 'usuario' AND ur.Tipo_usuario = 'usuario'
+			THEN 'Transferencia entre usuarios'	
+		WHEN (op.Operacion = 'Pago a usuario' OR op.Operacion = 'Cobro desde QR') AND ue.Tipo_usuario IN ('autonomo', 'Empresa') AND ur.Tipo_usuario IN ('autonomo', 'Empresa')
+			THEN 'Transferencia entre comercios'
+		WHEN op.Operacion = 'Recarga por tarjeta'
+			THEN 'Recarga App'
+		WHEN op.Operacion = 'Pago a usuario' AND ue.Tipo_usuario IN ('autonomo', 'Empresa') AND ur.Tipo_usuario = 'usuario'
+			THEN 'Recarga en tienda'
+		WHEN op.Operacion = 'Bonificación por compra'
+			THEN 'Cashback Ayuntamiento'
+		WHEN op.Operacion = 'Descuento automático'
+			THEN 'Cashback Comercio'
+		WHEN op.Operacion = 'Donación'
+			THEN 'Donación'
+		WHEN op.Operacion = 'Cuota de socio'
+			THEN 'Matrícula de socio'
+		WHEN op.Operacion = 'Cuota mensual de socio'
+			THEN 'Cuota mensual de socio'
+		WHEN op.Operacion = 'Cuota variable'
+			THEN 'Cuota variable'
+		WHEN op.Operacion = 'Retirada a cuenta bancaria'
+			THEN 'Retirada a cuenta bancaria'
+		WHEN  op.Operacion = 'Comisión por retirada'
+			THEN 'Comisión por retirada'
+		WHEN op.Operacion = 'Conversión a €'
+			THEN 'Conversión a €'
+		ELSE 'Otros'
+	END AS Tipo_operacion,
+	COUNT(DISTINCT ft.Id_transaccion) AS num_transacciones,
+	SUM(Cantidad) AS Dinero_total
+FROM fact_table ft
+LEFT JOIN dim_operaciones op ON ft.Id_tipo_operacion = op.Id_tipo_operacion
+LEFT JOIN dim_usuarios ue ON ft.Usuario_emisor = ue.Id_usuario
+LEFT JOIN dim_usuarios ur ON ft.Usuario_receptor = ur.Id_usuario
+LEFT JOIN dim_fecha fe ON ft.Id_fecha = fe.Id_fecha
+WHERE op.Operacion != 'Transferencia interna'
+GROUP BY fe.Ano, fe.Mes, Tipo_operacion
+ORDER BY Anho ASC, Mes ASC, Dinero_total DESC;
     """)
     resultado = mycursor.fetchall()
     return jsonify(resultado)
@@ -570,92 +608,30 @@ def revert_model_version(version):
 @app.route('/usuarios-unicos-mensuales-semana-dia', methods=['GET'])
 def usuarios_unicos_mensuales():
     query_datos_completo = """
-    WITH usuarios_diarios AS (
-        SELECT 
-            f.Id_fecha,
-            COUNT(DISTINCT 
-                CASE WHEN 
-                    (o.Operacion IN ('Pago a usuario', 'Cobro desde QR') AND 
-                     (
-                       (du_origen.Tipo_usuario = 'usuario' AND 
-                        du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-                       OR
-                       (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND 
-                        du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-                     ))
-                    THEN f.Usuario_emisor
-                END
-            ) as usuarios_unicos_dia
-        FROM fact_table f
-        JOIN dim_usuarios du_origen ON f.Usuario_emisor = du_origen.Id_usuario
-        JOIN dim_usuarios du_destino ON f.Usuario_receptor = du_destino.Id_usuario
-        JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
-        WHERE SUBSTRING(f.Id_fecha, 1, 4) = '2024'
-        GROUP BY f.Id_fecha
-    ),
-    usuarios_semanales AS (
-        SELECT 
-            DAYOFWEEK(STR_TO_DATE(Id_fecha, '%Y%m%d')) as dia_semana,
-            AVG(usuarios_unicos_dia) as promedio_usuarios_dia
-        FROM usuarios_diarios
-        GROUP BY DAYOFWEEK(STR_TO_DATE(Id_fecha, '%Y%m%d'))
-    ),
-    usuarios_mensuales AS (
-        SELECT 
-            SUBSTRING(f.Id_fecha, 1, 6) as año_mes,
-            SUBSTRING(f.Id_fecha, 5, 2) as mes,
-            COUNT(DISTINCT 
-                CASE WHEN 
-                    (o.Operacion IN ('Pago a usuario', 'Cobro desde QR') AND 
-                     (
-                       (du_origen.Tipo_usuario = 'usuario' AND 
-                        du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-                       OR
-                       (du_origen.Tipo_usuario IN ('Empresa', 'autonomo') AND 
-                        du_destino.Tipo_usuario IN ('Empresa', 'autonomo'))
-                     ))
-                    THEN f.Usuario_emisor
-                END
-            ) as usuarios_unicos_mes
-        FROM fact_table f
-        JOIN dim_usuarios du_origen ON f.Usuario_emisor = du_origen.Id_usuario
-        JOIN dim_usuarios du_destino ON f.Usuario_receptor = du_destino.Id_usuario
-        JOIN dim_operaciones o ON f.Id_tipo_operacion = o.Id_tipo_operacion
-        WHERE SUBSTRING(f.Id_fecha, 1, 4) = '2024'
-        GROUP BY SUBSTRING(f.Id_fecha, 1, 6), SUBSTRING(f.Id_fecha, 5, 2)
-    )
-    SELECT 
-        ud.Id_fecha,
-        CASE DAYOFWEEK(STR_TO_DATE(ud.Id_fecha, '%Y%m%d'))
-            WHEN 1 THEN 'Domingo'
-            WHEN 2 THEN 'Lunes'
-            WHEN 3 THEN 'Martes'
-            WHEN 4 THEN 'Miércoles'
-            WHEN 5 THEN 'Jueves'
-            WHEN 6 THEN 'Viernes'
-            WHEN 7 THEN 'Sábado'
-        END as dia_semana,
-        CASE SUBSTRING(ud.Id_fecha, 5, 2)
-            WHEN '01' THEN 'Enero'
-            WHEN '02' THEN 'Febrero'
-            WHEN '03' THEN 'Marzo'
-            WHEN '04' THEN 'Abril'
-            WHEN '05' THEN 'Mayo'
-            WHEN '06' THEN 'Junio'
-            WHEN '07' THEN 'Julio'
-            WHEN '08' THEN 'Agosto'
-            WHEN '09' THEN 'Septiembre'
-            WHEN '10' THEN 'Octubre'
-            WHEN '11' THEN 'Noviembre'
-            WHEN '12' THEN 'Diciembre'
-        END as mes,
-        ud.usuarios_unicos_dia,
-        us.promedio_usuarios_dia,
-        um.usuarios_unicos_mes
-    FROM usuarios_diarios ud
-    JOIN usuarios_semanales us ON DAYOFWEEK(STR_TO_DATE(ud.Id_fecha, '%Y%m%d')) = us.dia_semana
-    JOIN usuarios_mensuales um ON SUBSTRING(ud.Id_fecha, 5, 2) = um.mes
-    ORDER BY ud.Id_fecha;
+    WITH Usuarios_distintos AS (
+    SELECT Id_Fecha, COUNT(DISTINCT Usuario_emisor) AS usuarios_distintos
+    FROM fact_table ft
+    LEFT JOIN dim_usuarios ue ON ft.Usuario_emisor = ue.Id_usuario
+    WHERE ue.Tipo_usuario = 'usuario'
+    GROUP BY Id_Fecha
+),
+Usuarios_compra AS (
+    SELECT Id_Fecha, COUNT(DISTINCT Usuario_emisor) AS usuarios_compra
+    FROM fact_table ft
+    LEFT JOIN dim_usuarios ue ON ft.Usuario_emisor = ue.Id_usuario
+    LEFT JOIN dim_usuarios ur ON ft.Usuario_receptor = ur.Id_usuario
+    WHERE ue.Tipo_usuario = 'usuario'
+        AND ft.Id_tipo_operacion IN (1,7)
+        AND ur.Tipo_usuario IN ('autonomo', 'Empresa')
+    GROUP BY Id_Fecha
+)
+SELECT
+    ud.Id_Fecha,
+    ud.usuarios_distintos,
+    COALESCE(uc.usuarios_compra, 0) AS usuarios_compra  -- Maneja valores nulos si no hay compras ese día
+FROM Usuarios_distintos ud
+LEFT JOIN Usuarios_compra uc ON ud.Id_Fecha = uc.Id_Fecha
+ORDER BY ud.Id_Fecha;
     """
     
     # Ejecutar la consulta

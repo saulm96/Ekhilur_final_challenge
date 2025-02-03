@@ -48,6 +48,8 @@ const getClientPageData = async () => {
         const transaccionesPorEdad = await fetchWithRetry(`${DATA_API_URL}/transacciones-grupo-edad-operacion`);
         
         const ticketMedio = await fetchWithRetry(`${DATA_API_URL}/ticket-medio-qr-app`);
+
+        /* const ususariosUnicos = await fetchWithRetry(`${DATA_API_URL}/usuarios-unicos-mensuales-semana-dia`); */
         
         const transaccionesPorHora = await fetchWithRetry(`${DATA_API_URL}/transacciones-por-horas`); // hay que borrar
 
@@ -59,7 +61,8 @@ const getClientPageData = async () => {
             porcentajePagos,
             transaccionesPorEdad,
             ticketMedio,
-            transaccionesPorHora
+            transaccionesPorHora,
+           /*  ususariosUnicos */
             
         };
 
