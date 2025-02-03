@@ -518,29 +518,6 @@ def predict():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/predict/csv', methods=['GET'])
-def predict_csv():
-    """
-    Endpoint para realizar predicciones usando solo datos de CSV
-    """
-    try:
-        from predictor_definitivo.predictor_ingresos import predecir_mes_siguiente_csv
-        resultado = predecir_mes_siguiente_csv()
-        return jsonify(resultado)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/predict/db', methods=['GET'])
-def predict_db():
-    """
-    Endpoint para realizar predicciones usando solo datos de la base de datos
-    """
-    try:
-        from predictor_definitivo.predictor_ingresos import predecir_mes_siguiente_db
-        resultado = predecir_mes_siguiente_db()
-        return jsonify(resultado)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/model/retrain', methods=['POST'])
 def retrain_model():
