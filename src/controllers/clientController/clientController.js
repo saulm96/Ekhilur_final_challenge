@@ -51,13 +51,16 @@ const getClientPageData = async () => {
         
         const transaccionesPorHora = await fetchWithRetry(`${DATA_API_URL}/transacciones-por-horas`);
 
+        const transaccionesEntreSemanaYFinDeSemana = await fetchWithRetry(`${DATA_API_URL}/transacciones-entre-semana-y-fin-de-semana`);
+
         const responseData = {
             usuariosPorEdad,
             evolucionAltas,
             porcentajePagos,
             transaccionesPorEdad,
             ticketMedio,
-            transaccionesPorHora
+            transaccionesPorHora,
+            transaccionesEntreSemanaYFinDeSemana
         };
 
         return responseData;
