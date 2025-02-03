@@ -44,11 +44,17 @@ const getTransictionPageData = async () => {
         const totalWastedVsCashBack = await fetchWithRetry(`${DATA_API_URL}/gasto-total-vs-cashback-total`);
         
         const mobileAverage = await fetchWithRetry(`${DATA_API_URL}/medias-moviles`);
+
+        const transaccionesEntreSemanaYFinDeSemana = await fetchWithRetry(`${DATA_API_URL}/transacciones-entre-semana-y-fin-de-semana`);
+
+        const transaccionesPorHora = await fetchWithRetry(`${DATA_API_URL}/transacciones-por-horas`);
         
         const responseData = {
             transactions,
             totalWastedVsCashBack,
-            mobileAverage
+            mobileAverage,
+            transaccionesEntreSemanaYFinDeSemana,
+            transaccionesPorHora
         };
         return responseData;
 
