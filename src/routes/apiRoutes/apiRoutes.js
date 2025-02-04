@@ -19,13 +19,14 @@ const router = Router();
 router.use("/user",userRoute);
 router.use("/client", clientRouter)
 router.use("/landing-page", landingPageApiRouter)
-router.use("/transaction", transactionApiRouter)
-router.use("/predict", predictApiRouter)
-router.get("/blacklist", getAllBlacklistedTokens);
+router.use("/transaction",isAdmin ,transactionApiRouter)
+router.use("/predict",isCouncil, isAdmin ,predictApiRouter)
 
 router.post("/login", authApiController.login);
 router.post("/2fa/verify" ,authApiController.verify2FA);
 router.post("/logout",isAuthenticated ,authApiController.logout); 
+router.get("/blacklist", isAdmin ,getAllBlacklistedTokens);
+
 
 //Endpoints para que los de ciberseguridad prueben si son capaces de escalar en privilegios 
 
