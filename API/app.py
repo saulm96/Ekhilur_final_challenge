@@ -609,29 +609,29 @@ def revert_model_version(version):
 def usuarios_unicos_mensuales():
     query_datos_completo = """
     WITH Usuarios_distintos AS (
-    SELECT Id_Fecha, COUNT(DISTINCT Usuario_emisor) AS usuarios_distintos
+    SELECT Id_fecha, COUNT(DISTINCT Usuario_emisor) AS usuarios_distintos
     FROM fact_table ft
     LEFT JOIN dim_usuarios ue ON ft.Usuario_emisor = ue.Id_usuario
     WHERE ue.Tipo_usuario = 'usuario'
-    GROUP BY Id_Fecha
+    GROUP BY Id_fecha
 ),
 Usuarios_compra AS (
-    SELECT Id_Fecha, COUNT(DISTINCT Usuario_emisor) AS usuarios_compra
+    SELECT Id_fecha, COUNT(DISTINCT Usuario_emisor) AS usuarios_compra
     FROM fact_table ft
     LEFT JOIN dim_usuarios ue ON ft.Usuario_emisor = ue.Id_usuario
     LEFT JOIN dim_usuarios ur ON ft.Usuario_receptor = ur.Id_usuario
     WHERE ue.Tipo_usuario = 'usuario'
         AND ft.Id_tipo_operacion IN (1,7)
         AND ur.Tipo_usuario IN ('autonomo', 'Empresa')
-    GROUP BY Id_Fecha
+    GROUP BY Id_fecha
 )
 SELECT
-    ud.Id_Fecha,
+    ud.Id_fecha,
     ud.usuarios_distintos,
     COALESCE(uc.usuarios_compra, 0) AS usuarios_compra  -- Maneja valores nulos si no hay compras ese día
 FROM Usuarios_distintos ud
-LEFT JOIN Usuarios_compra uc ON ud.Id_Fecha = uc.Id_Fecha
-ORDER BY ud.Id_Fecha;
+LEFT JOIN Usuarios_compra uc ON ud.Id_fecha = uc.Id_fecha
+ORDER BY ud.Id_fecha;
     """
     
     # Ejecutar la consulta
@@ -740,6 +740,55 @@ def medias_moviles():
     """)
     resultado = mycursor.fetchall()
     return jsonify(resultado)
+
+    # MAPAS
+# Endpoint mapa usuarios por zona
+@app.route('/mapa-usuarios-zona', methods=['GET'])
+def mapa_usuarios_zona():
+    mycursor = mydb.cursor(dictionary=True)
+
+    mycursor.execute("""
+    SELECT Nombre_calle,
+        Coordenadas,
+        SUBSTRING_INDEX(Coordenadas, ',', 1) AS Latitud,
+        SUBSTRING_INDEX(Coordenadas, ',', -1) AS Longitud,
+        COUNT(DISTINCT Id_usuario) AS num_usuarios
+    FROM dim_usuarios du    
+    LEFT JOIN dim_direcciones dd ON du.Id_direccion = dd.Id_calle
+    WHERE du.Tipo_usuario = 'usuario' AND Coordenadas IS NOT NULL
+    GROUP BY Nombre_calle, Coordenadas
+    ORDER BY Nombre_calle;
+    """)
+    
+    
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
+# Endpoint  MAPA usuarios unicos diarios    
+@app.route('/mapa-ticket-medio', methods=['GET'])
+def mapa_ticket_medio():
+    mycursor = mydb.cursor(dictionary=True)
+
+    mycursor.execute("""
+    SELECT Nombre_calle,
+        Coordenadas,
+        SUBSTRING_INDEX(Coordenadas, ',', 1) AS Latitud,
+        SUBSTRING_INDEX(Coordenadas, ',', -1) AS Longitud,
+        AVG(Cantidad) AS Ticket_medio
+    FROM fact_table ft
+    LEFT JOIN dim_usuarios ue ON ft.Usuario_emisor = ue.Id_usuario
+    LEFT JOIN dim_usuarios ur ON ft.Usuario_receptor = ur.Id_usuario
+    LEFT JOIN dim_direcciones dd ON ue.Id_direccion = dd.Id_calle
+    WHERE ft.Id_tipo_operacion IN (1,7) AND ue.Tipo_usuario = 'usuario' AND ur.Tipo_usuario IN ('Empresa', 'autonomo') AND Coordenadas IS NOT NULL
+    GROUP BY Nombre_calle, Coordenadas
+    ORDER BY Nombre_calle;
+    """)
+    
+    
+    resultado = mycursor.fetchall()
+    return jsonify(resultado)
+
+
 
 # Ejecutar la aplicación
 if __name__ == '__main__':
