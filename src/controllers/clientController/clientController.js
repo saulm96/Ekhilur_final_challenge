@@ -49,7 +49,9 @@ const getClientPageData = async () => {
         
         const ticketMedio = await fetchWithRetry(`${DATA_API_URL}/ticket-medio-qr-app`);
         
-        const transaccionesPorHora = await fetchWithRetry(`${DATA_API_URL}/transacciones-por-horas`);
+        const transaccionesPorHora = await fetchWithRetry(`${DATA_API_URL}/transacciones-por-horas`); // hay que borrar
+
+        
 
         const responseData = {
             usuariosPorEdad,
@@ -58,6 +60,7 @@ const getClientPageData = async () => {
             transaccionesPorEdad,
             ticketMedio,
             transaccionesPorHora
+            
         };
 
         return responseData;

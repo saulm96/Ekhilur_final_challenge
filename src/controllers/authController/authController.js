@@ -4,7 +4,6 @@ import userError from "../../utils/errors/userErrors.js";
 
 
 async function login(email, password) {
-
     const user = await userController.getUserByEmail(email);
     if (!user) {
         throw new userError.USER_NOT_FOUND();

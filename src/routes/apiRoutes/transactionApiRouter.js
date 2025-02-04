@@ -4,5 +4,6 @@ import transactionApiController from "../../controllers/transactionController/tr
 const router = Router();    
 
 router.get("/type", transactionApiController.getSumByTransactionsType);
+router.get("/data", transactionApiController.getTransictionPageData);
 
 export default router;
