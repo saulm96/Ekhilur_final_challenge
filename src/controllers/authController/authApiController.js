@@ -90,7 +90,6 @@ async function verify2FA(req, res) {
 
         res.cookie("authToken", authToken, {
             httpOnly: true,
-            secure: true,
             sameSite: "strict",
             maxAge: 3600000,
             path: "/"
