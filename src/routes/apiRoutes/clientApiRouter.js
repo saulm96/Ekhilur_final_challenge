@@ -3,7 +3,11 @@ import clientApiController from "../../controllers/clientController/clientApiCon
 
 const router = Router();
 
-router.get("/all", clientApiController.getAllClients); 
+router.get("/all", clientApiController.getAllClients);
+router.get("/data", clientApiController.getClientPageData);
 
 
 export default router;
+
+
+

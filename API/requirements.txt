@@ -3,4 +3,8 @@ python-dotenv
 mysql-connector-python
 flask-cors
 flask-RESTful
-flask-SQLAlchemy
+
+pandas
+numpy
+datetime
+xgboost
