@@ -48,13 +48,16 @@ const getTransictionPageData = async () => {
         const transaccionesEntreSemanaYFinDeSemana = await fetchWithRetry(`${DATA_API_URL}/total-entresemana-findesemana`);  
 
         const transaccionesPorHora = await fetchWithRetry(`${DATA_API_URL}/transacciones-por-horas`);
+
+        const mapTicketMedio = await fetchWithRetry(`${DATA_API_URL}/mapa-ticket-medio`);
         
         const responseData = {
             transactions,
             totalWastedVsCashBack,
             mobileAverage,
             transaccionesEntreSemanaYFinDeSemana,
-            transaccionesPorHora
+            transaccionesPorHora,
+            mapTicketMedio
         };
         return responseData;
 

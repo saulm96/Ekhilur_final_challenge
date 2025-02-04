@@ -53,6 +53,8 @@ const getClientPageData = async () => {
         
         const transaccionesPorHora = await fetchWithRetry(`${DATA_API_URL}/transacciones-por-horas`); // hay que borrar
 
+        const mapaClienteZona = await fetchWithRetry(`${DATA_API_URL}/mapa-usuarios-zona`);
+
         
 
         const responseData = {
@@ -62,6 +64,7 @@ const getClientPageData = async () => {
             transaccionesPorEdad,
             ticketMedio,
             transaccionesPorHora,
+            mapaClienteZona
            /*  ususariosUnicos */
             
         };
