@@ -18,7 +18,7 @@ const getPredictions = async () => {
         const response = await fetchWithRetry(`${DATA_API_URL}/predict`);
         await redisClient.set(CACHE_KEY, JSON.stringify(response), { EX: CACHE_EXPIRATION });
         console.log("Datos guardados en Redis");
-        return response;
+        return response; 
     } catch (error) {
         console.error('Error in predictController:', error.message);
         if (error.response) {
