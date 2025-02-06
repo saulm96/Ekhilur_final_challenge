@@ -1,5 +1,4 @@
-.env:
-Add SECRET_SESSION in the .env in the app.use(session) when cookies are implemented to manage sessions.
+CYBERSECURITY AUDIT:
 
-JWT:
-Think about the duration of the token
+For FL ppl:
+-First issue with the auth test fixed, just deleted the whole document since it is not necessary anymore.

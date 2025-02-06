@@ -1,0 +1,10 @@
+flask
+python-dotenv
+mysql-connector-python
+flask-cors
+flask-RESTful
+
+pandas
+numpy
+datetime
+xgboost

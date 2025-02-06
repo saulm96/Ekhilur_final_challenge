@@ -10,5 +10,4 @@ async function verifyPassword(password, hashedPassword){
     return match
 }
 
-
 export {hashPassword, verifyPassword};

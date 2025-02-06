@@ -1,20 +1,24 @@
 import jwt from "../config/jwt.js";
-import checkIfTheTokenExistsAndTheType from "../utils/errors/authErrorHandle.js";
+import { isTokenBlackListed } from "../utils/redisUtils/cookiesBlackList.js";
 
-export async function isAutenticated(req, res, next){
+export async function isAuthenticated(req, res, next){
     try {
-        const authorization = checkIfTheTokenExistsAndTheType(req.headers.authorization);
-        const token = authorization.split(' ')[1];
-        
-        const verifiedToken = jwt.verify(token);
-
-        if(!verifiedToken){
-            return res.status(401).json({ message: 'Invalid token' });
+        const token = req.cookies?.authToken;
+        if(!token){
+            return res.status(401).json({message: "Unauthorized"});
         }
 
-        next();
+        const isBlacklisted = await isTokenBlackListed(token);
+        if(isBlacklisted){
+            return res.status(401).json({message: "The token is in the blacklist!!!!"});
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = decoded;
+        next()
     } catch (error) {
-        return res.status(401).json({ message: 'Something happened while verifying the token' });
+        console.error(error);
+        return res.status(500).json({message: "ups! something went wrong"});
     }
 }
 

@@ -1,7 +1,6 @@
 services:
   db:
     container_name: ${DB_HOST}
-    
     image: mysql:8.0
     restart: unless-stopped
     environment:
@@ -11,19 +10,137 @@ services:
       MYSQL_DATABASE: ${DB_DATABASE}
     ports:
       - ${DB_PORT}:3306
-      
     volumes:
+      - mysql-data-primary:/var/lib/mysql
       - ./mySQL/scripts:/docker-entrypoint-initdb.d:ro
       - ./mySQL/config/mycustom.cnf:/etc/mysql/conf.d/custom.cnf
-      - /var/lib/mysql
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  data_db:
+    container_name: ${DATA_DB_HOST}
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DATA_DB_ROOT_PASSWORD}
+      MYSQL_USER: ${DATA_DB_USER}
+      MYSQL_PASSWORD: ${DATA_DB_PASSWORD}
+      MYSQL_DATABASE: ${DATA_DB_DATABASE}
+    ports:
+      - 3308:3306
+    volumes:
+      - mysql-data-secondary:/var/lib/mysql
+      - ./data-database/scripts:/docker-entrypoint-initdb.d:ro
+      - ./data-database/config/data-custom.cnf:/etc/mysql/conf.d/custom.cnf
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: >
+      sh -c "redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}"
+
+    volumes:
+      - redis-data:/data
+      - ./redis/config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./redis/logs:/logs:rw
+    user: "root"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
   backend:
     build: .
     container_name: ${APP_HOST}
     restart: unless-stopped
     ports:
       - ${APP_PORT}:3000
-    depends_on: 
-      - db
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - .:/app
       - /app/node_modules
+    networks:
+      - app-network
+      - desafio-ekhilur 
+
+  api:
+    build: 
+      context: ./API
+      dockerfile: Dockerfile
+    container_name: ${DATA_API_APP_HOST}
+    restart: unless-stopped
+    ports:
+      - ${DATA_API_APP_PORT}:5000
+    environment:
+      - DATA_DB_HOST=${DATA_DB_HOST}
+      - DATA_DB_USER=${DATA_DB_USER}
+      - DATA_DB_PASSWORD=${DATA_DB_PASSWORD}
+      - DATA_DB_DATABASE=${DATA_DB_DATABASE}
+      - DATA_DB_PORT=${DATA_DB_PORT}
+    depends_on:
+      data_db:
+        condition: service_healthy
+    volumes:
+      - ./API:/app
+      - .env:/app/.env
+    networks:
+      - app-network
+      - desafio-ekhilur
+networks:
+  app-network:
+    driver: bridge
+  desafio-ekhilur: 
+   
+
+volumes:
+  mysql-data-primary:
+    driver: local
+  mysql-data-secondary:
+    driver: local
+  redis-data:
+    driver: local
