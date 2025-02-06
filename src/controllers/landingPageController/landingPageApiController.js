@@ -12,8 +12,21 @@ async function getLandingPageData(req, res) {
     }
 }
 
+
+async function getUpdatedLandingPage(req, res){
+    try {
+        const updatedLandingPage = await landingPageController.getUpdatedLandingPage();
+        res.status(200).json(updatedLandingPage);
+    } catch (error) {
+        console.error('API Controller error', error);
+        res.status(error.status || 500).json({
+            error: error.message || 'Error al obtener las transacciones actualizadas'
+        })
+    }
+}
 export const landingPageApiController = {
-    getLandingPageData
+    getLandingPageData,
+    getUpdatedLandingPage
 };
 
 export default landingPageApiController;

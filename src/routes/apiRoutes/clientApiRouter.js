@@ -4,6 +4,7 @@ import clientApiController from "../../controllers/clientController/clientApiCon
 const router = Router();
 
 router.get("/data", clientApiController.getClientPageData);
+router.get("/data/update", clientApiController.getUpdatedClientPageData)
 
 
 export default router;
