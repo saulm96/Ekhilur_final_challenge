@@ -10,7 +10,6 @@ import clientRouter from "./clientApiRouter.js";
 import landingPageApiRouter from "./landingPageApiRouter.js";
 import transactionApiRouter from "./transactionApiRouter.js";
 import predictApiRouter from './predictApiRouter.js';
-import mapApiRouter from "./mapApiRouter.js";
 
 
 const router = Router();
@@ -21,7 +20,6 @@ router.use("/client", clientRouter)
 router.use("/landing-page", landingPageApiRouter)
 router.use("/transaction", transactionApiRouter)
 router.use("/predict", predictApiRouter)
-router.use("/map", mapApiRouter)
 router.get("/blacklist", getAllBlacklistedTokens);
 
 router.post("/login", authApiController.login);
