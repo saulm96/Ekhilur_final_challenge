@@ -65,11 +65,7 @@ const getTransictionPageData = async () => {
 
 const getUpdatedTransactions = async () =>{
     try {
-        await redisClient.del(CACHE_KEY);
-        console.log("Datos de transacciones eliminado de Redis");
-        const updatedTransactions = await getTransictionPageData();
-
-        return updatedTransactions;
+        return await redisClient.del(CACHE_KEY);
     } catch (error) {
         
     }
