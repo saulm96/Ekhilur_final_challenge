@@ -4,7 +4,7 @@ import { redisClient } from '../../utils/redisUtils/cookiesBlackList.js';
 
 dotenv.config();
 const CACHE_KEY = 'predictions';
-const CACHE_EXPIRATION = 36000; // 10 horas
+const CACHE_EXPIRATION = 36000; 
 
 const DATA_API_URL = `http://${process.env.DATA_API_APP_HOST}:5000`;
 

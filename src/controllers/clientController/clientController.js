@@ -52,7 +52,7 @@ const getClientPageData = async () => {
         const transaccionesPorHora = await fetchWithRetry(`${DATA_API_URL}/transacciones-por-horas`);
         const mapaClienteZona = await fetchWithRetry(`${DATA_API_URL}/mapa-usuarios-zona`);
 
-        // Construir la respuesta completa
+
         const responseData = {
             usuariosPorEdad,
             evolucionAltas,
@@ -63,9 +63,9 @@ const getClientPageData = async () => {
             mapaClienteZona
         };
 
-        // Guardar la respuesta completa en Redis
+
         await redisClient.set(CACHE_KEY, JSON.stringify(responseData), {
-            EX: CACHE_EXPIRATION, // Tiempo de expiración en segundos
+            EX: CACHE_EXPIRATION, 
         });
 
         console.log('Datos guardados en Redis');
