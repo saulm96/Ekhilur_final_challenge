@@ -1,40 +1,34 @@
-import axios from 'axios';
 import dotenv from 'dotenv';
+import { fetchWithRetry } from '../../utils/redisUtils/fetchWithCache.js';
+import { redisClient } from '../../utils/redisUtils/cookiesBlackList.js';
 
 dotenv.config();
 
+const CACHE_KEY = 'landingPageData';
+const CACHE_EXPIRATION = 36000; // 10 horas
+
 const DATA_API_URL = `http://${process.env.DATA_API_APP_HOST}:5000`;
 
-// Función de utilidad para hacer llamadas con reintentos
-const fetchWithRetry = async (url, retries = 3, delay = 1000) => {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await axios.get(url, {
-                timeout: 5000, // 5 segundos de timeout
-                headers: {
-                    'Connection': 'close' // Forzar el cierre de la conexión después de cada petición
-                }
-            });
-            return response.data;
-        } catch (error) {
-            if (i === retries - 1) throw error; // Si es el último intento, propagar el error
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
-    }
-};
 
 const getLandingPageData = async () => {
     try {
-        
+
+        const cachedData = await redisClient.get(CACHE_KEY);
+        if (cachedData) {
+            console.log('Datos obtenidos de Redis');
+            return JSON.parse(cachedData);
+        }
+        console.log('Datos no encontrados en Redis, llamando a la API externa...');
+
         // Hacer las llamadas de forma secuencial para evitar sobrecarga
         const usersAnalysis = await fetchWithRetry(`${DATA_API_URL}/analyze_users`);
-        
+
         const monthlyAverage = await fetchWithRetry(`${DATA_API_URL}/analyze_monthly_average_simple`);
-        
+
         const monthlySavings = await fetchWithRetry(`${DATA_API_URL}/analyze_monthly_savings`);
-        
+
         const totalOperations = await fetchWithRetry(`${DATA_API_URL}/analyze_total_simple`);
-        
+
         const cashFlow = await fetchWithRetry(`${DATA_API_URL}/analyze_cash_flow`);
 
         // Construir y retornar el objeto de respuesta consolidado
@@ -45,6 +39,8 @@ const getLandingPageData = async () => {
             totalOperationsData: totalOperations,
             cashFlowAnalysis: cashFlow
         };
+
+        await redisClient.set(CACHE_KEY, JSON.stringify(responseData), { EX: CACHE_EXPIRATION });
 
         return responseData;
 

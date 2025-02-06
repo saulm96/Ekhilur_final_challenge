@@ -1,14 +1,24 @@
-import  axios from 'axios';
 import dotenv from 'dotenv';
+import { fetchWithRetry } from '../../utils/redisUtils/fetchWithCache.js';
+import { redisClient } from '../../utils/redisUtils/cookiesBlackList.js';
 
 dotenv.config();
+const CACHE_KEY = 'predictions';
+const CACHE_EXPIRATION = 36000; // 10 horas
 
 const DATA_API_URL = `http://${process.env.DATA_API_APP_HOST}:5000`;
 
 const getPredictions = async () => {
     try {
-        const response = await axios.get(`${DATA_API_URL}/predict`);
-        return response.data;
+        const cachedData = await redisClient.get(CACHE_KEY);
+        if (cachedData) {
+            console.log('Datos obtenidos de Redis');
+            return JSON.parse(cachedData);
+        }
+        const response = await fetchWithRetry(`${DATA_API_URL}/predict`);
+        await redisClient.set(CACHE_KEY, JSON.stringify(response), { EX: CACHE_EXPIRATION });
+        console.log("Datos guardados en Redis");
+        return response;
     } catch (error) {
         console.error('Error in predictController:', error.message);
         if (error.response) {

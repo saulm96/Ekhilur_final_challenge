@@ -1,8 +1,13 @@
 // clientController.js
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { redisClient } from '../../utils/redisUtils/cookiesBlackList.js';
+import { fetchWithRetry } from '../../utils/redisUtils/fetchWithCache.js';
 
 dotenv.config();
+
+const CACHE_KEY = 'clients';
+const CACHE_EXPIRATION = 36000; // 10 horas 
 
 const DATA_API_URL = `http://${process.env.DATA_API_APP_HOST}:5000`;
 
@@ -23,40 +28,31 @@ const getAllClients = async () => {
     }
 };
 
-const fetchWithRetry = async (url, retries = 3, delay = 1000) => {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await axios.get(url);
-            return response.data;
-        } catch (error) {
-            if (i === retries - 1) throw error;
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
-    }
-};
 
 const getClientPageData = async () => {
     try {
-        
+        // Intentar obtener la respuesta completa de Redis
+        const cachedData = await redisClient.get(CACHE_KEY);
+
+        if (cachedData) {
+            // Si los datos están en caché, devolverlos
+            console.log('Datos obtenidos de Redis');
+            return JSON.parse(cachedData);
+        }
+
+        // Si no están en caché, obtener los datos de la API externa
+        console.log('Datos no encontrados en Redis, llamando a la API externa...');
+
         // Usar las rutas correctas que existen en la API Flask
         const usuariosPorEdad = await fetchWithRetry(`${DATA_API_URL}/cantidad-usuarios-grupo-edad`);
-        
         const evolucionAltas = await fetchWithRetry(`${DATA_API_URL}/evolucion-altas-mes`);
-        
         const porcentajePagos = await fetchWithRetry(`${DATA_API_URL}/porcentaje-pagos-qr-app`);
-        
         const transaccionesPorEdad = await fetchWithRetry(`${DATA_API_URL}/transacciones-grupo-edad-operacion`);
-        
         const ticketMedio = await fetchWithRetry(`${DATA_API_URL}/ticket-medio-qr-app`);
-
-        /* const ususariosUnicos = await fetchWithRetry(`${DATA_API_URL}/usuarios-unicos-mensuales-semana-dia`); */
-        
-        const transaccionesPorHora = await fetchWithRetry(`${DATA_API_URL}/transacciones-por-horas`); // hay que borrar
-
+        const transaccionesPorHora = await fetchWithRetry(`${DATA_API_URL}/transacciones-por-horas`);
         const mapaClienteZona = await fetchWithRetry(`${DATA_API_URL}/mapa-usuarios-zona`);
 
-        
-
+        // Construir la respuesta completa
         const responseData = {
             usuariosPorEdad,
             evolucionAltas,
@@ -65,12 +61,16 @@ const getClientPageData = async () => {
             ticketMedio,
             transaccionesPorHora,
             mapaClienteZona
-           /*  ususariosUnicos */
-            
         };
 
+        // Guardar la respuesta completa en Redis
+        await redisClient.set(CACHE_KEY, JSON.stringify(responseData), {
+            EX: CACHE_EXPIRATION, // Tiempo de expiración en segundos
+        });
+
+        console.log('Datos guardados en Redis');
         return responseData;
-        
+
     } catch (error) {
         console.error('Error in clientController:', error.message);
         if (error.response) {
@@ -84,6 +84,7 @@ const getClientPageData = async () => {
         };
     }
 };
+
 
 export const clientController = {
     getAllClients,

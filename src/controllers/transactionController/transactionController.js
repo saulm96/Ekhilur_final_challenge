@@ -1,22 +1,16 @@
 import  axios from 'axios';
 import dotenv from 'dotenv';
+import { fetchWithRetry } from '../../utils/redisUtils/fetchWithCache.js';
+import { redisClient } from '../../utils/redisUtils/cookiesBlackList.js';
 
 dotenv.config();
+
+const CACHE_KEY = 'transactions';
+const CACHE_EXPIRATION = 36000; // 10 horas
 
 const DATA_API_URL = `http://${process.env.DATA_API_APP_HOST}:5000`;
 
 
-const fetchWithRetry = async (url, retries = 3, delay = 1000) => {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await axios.get(url);
-            return response.data;
-        } catch (error) {
-            if (i === retries - 1) throw error;
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
-    }
-};
 
 const getSumByTransactionsType = async () => {
     try {
@@ -39,6 +33,13 @@ const getSumByTransactionsType = async () => {
 const getTransictionPageData = async () => {
     try{
 
+        const cachedData = await redisClient.get(CACHE_KEY);
+        if (cachedData) {
+            console.log('Datos obtenidos de Redis');
+            return JSON.parse(cachedData);
+        }
+        console.log('Datos no encontrados en Redis, llamando a la API externa...');
+
         const transactions = await fetchWithRetry(`${DATA_API_URL}/suma-por-tipo-de-transaccion`);
 
         const totalWastedVsCashBack = await fetchWithRetry(`${DATA_API_URL}/gasto-total-vs-cashback-total`);
@@ -59,6 +60,9 @@ const getTransictionPageData = async () => {
             transaccionesPorHora,
             mapTicketMedio
         };
+
+        await redisClient.set(CACHE_KEY, JSON.stringify(responseData), { EX: CACHE_EXPIRATION });
+        console.log('Datos almacenados en Redis');
         return responseData;
 
 
