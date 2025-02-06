@@ -35,11 +35,7 @@ const getPredictions = async () => {
 const getUpdatePredictions = async () => {
     try {
         // Borrar la clave de caché para que se actualice
-        await redisClient.del(CACHE_KEY);
-        console.log('Datos de predicciones eliminados de Redis');
-        const updatedPredictions = await getPredictions();
-
-        return updatedPredictions;
+        return await redisClient.del(CACHE_KEY);
     } catch (error) {
         console.error('Error in predictController:', error.message);
     }

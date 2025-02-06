@@ -4,7 +4,7 @@ import landigPageApiController, { landingPageApiController } from "../../control
 const router = Router();
 
 router.get("/all", landigPageApiController.getLandingPageData); 
-router.get("/all/update", landingPageApiController.getUpdatedLandingPage)
+router.get("/data/update", landingPageApiController.getUpdatedLandingPage)
 
 
 export default router;

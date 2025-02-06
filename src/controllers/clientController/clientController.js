@@ -69,11 +69,7 @@ const getClientPageData = async () => {
 
 const getUpdatedClientPageData = async () =>{
     try {
-        await redisClient.del(CACHE_KEY);
-        console.log("Datos de clientes eliminado de Redis")
-        const updatedClientPAgeData = await clientController.getClientPageData();
-        return updatedClientPAgeData;
-
+       return await redisClient.del(CACHE_KEY);
     } catch (error) {
         console.error('API Controller error', error);
        
