@@ -57,7 +57,20 @@ const getLandingPageData = async () => {
     }
 };
 
+const getUpdatedLandingPage = async () => {
+    try {
+        await redisClient.del(CACHE_KEY)
+        console.log('Datos de la landing page eliminados de redis')
+        const updatedLandingPAgeData = await getLandingPageData();
+
+        return updatedLandingPAgeData
+    } catch (error) {
+        console.error('Error en landingPAge controller')
+    }
+}
+
 export const landingPageController = {
+    getUpdatedLandingPage,
     getLandingPageData
 };
 

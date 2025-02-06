@@ -1,18 +1,6 @@
 // clientApiController.js
 import clientController from './clientController.js';
 
-async function getAllClients(req, res) {
-    try {
-        const clients = await clientController.getAllClients();
-        res.status(200).json(clients);
-    } catch (error) {
-        console.error('API Controller Error:', error);
-        res.status(error.status || 500).json({ 
-            error: error.message || 'Error al obtener los clientes'
-        });
-    }
-}
-
 
 async function getClientPageData(req, res) {
     try {
@@ -26,9 +14,21 @@ async function getClientPageData(req, res) {
     }
 }
 
+
+async function getUpdatedClientPageData(req, res){
+    try {
+        const updatedClientPageData = await clientController.getUpdatedClientPageData();
+        res.status(200).json(updatedClientPageData);
+    } catch (error) {
+        console.error('API Controller error', error);
+        res.status(error.status || 500).json({
+            error: error.message || 'Error al obtener las transacciones actualizadas'
+        })
+    }
+}
 export const clientApiController = {
-    getAllClients,
-    getClientPageData
+    getClientPageData,
+    getUpdatedClientPageData
 };
 
 export default clientApiController;

@@ -5,4 +5,6 @@ const router = Router();
 
 router.get("/data", transactionApiController.getTransictionPageData);
 
+router.get("/data/update", transactionApiController.getUpdatedTransactions)
+
 export default router;
